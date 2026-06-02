@@ -133,16 +133,56 @@ textarea:focus {
   margin-bottom: 24px;
 }
 
-.sidebar nav {
+.sidebar nav,
+.sidebar-nav {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+}
+
+.nav-section {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+.nav-section-title {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: space-between;
+  line-height: 18px;
+  min-height: 26px;
+  padding: 4px 12px 2px;
+  width: 100%;
+}
+
+button.nav-section-title:hover {
+  background: var(--color-surface-soft);
+  border-color: transparent;
+  color: var(--color-primary);
 }
 
 .sidebar a {
   border-radius: var(--radius-sm);
   color: #536072;
+  display: block;
   padding: 10px 12px;
   text-decoration: none;
+}
+
+.nav-section-links {
+  display: grid;
+  gap: 4px;
+}
+
+.nav-section-links a {
+  padding-left: 22px;
 }
 
 .sidebar a.active {
@@ -277,6 +317,34 @@ td.actions > * + * {
 
 .table-wrap table {
   min-width: 100%;
+}
+
+.pagination-bar {
+  align-items: center;
+  color: var(--color-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.pagination-bar button {
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.pagination-bar label {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.pagination-bar select {
+  min-height: 30px;
+  min-width: 74px;
+  width: auto;
 }
 
 .product-picker + .panel .table-wrap table,

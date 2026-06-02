@@ -14,17 +14,22 @@ export default function QuotationList() {
   const [rows, setRows] = useState<Quotation[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  async function load() {
-    const result = await apiGet<QuotationPage>(`/quotations?page=1&pageSize=20&status=${status}`);
-      setRows(result.items);
-      setTotal(result.total);
-      setSelectedIds([]);
+  async function load(nextPage = page, nextPageSize = pageSize) {
+    const result = await apiGet<QuotationPage>(`/quotations?page=${nextPage}&pageSize=${nextPageSize}&status=${status}`);
+    setRows(result.items);
+    setTotal(result.total);
+    setSelectedIds([]);
+    const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
+    if (nextPage > nextTotalPages) setPage(nextTotalPages);
   }
 
   useEffect(() => {
     load();
-  }, [status]);
+  }, [status, page, pageSize]);
 
   async function removeSelected() {
     if (!selectedIds.length) return;
@@ -44,7 +49,10 @@ export default function QuotationList() {
         </div>
         <div className="segmented">
           {tabs.map(([value, label]) => (
-            <button key={value} className={status === value ? 'active' : ''} onClick={() => setStatus(value)}>
+            <button key={value} className={status === value ? 'active' : ''} onClick={() => {
+              setStatus(value);
+              setPage(1);
+            }}>
               {label}
             </button>
           ))}
@@ -105,6 +113,20 @@ export default function QuotationList() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="pagination-bar">
+        <span>第 {page} / {totalPages} 页</span>
+        <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
+        <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>下一页</button>
+        <label>
+          每页
+          <select value={pageSize} onChange={(event) => {
+            setPageSize(Number(event.target.value));
+            setPage(1);
+          }}>
+            {[10, 20, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
       </div>
     </section>
   );

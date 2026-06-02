@@ -247,7 +247,7 @@ export default function QuotationGenerate() {
                     <td className="numeric-cell">{money(preview?.ddpTotalUsd)}</td>
                     <td className="numeric-cell">{money(preview?.ddpUnitPriceUsd)}</td>
                     <td><input type="number" step="0.01" value={item.markupRate ?? ''} onChange={(event) => updateItem(index, { markupRate: event.target.value ? Number(event.target.value) : undefined })} /></td>
-                    <td className="numeric-cell">{money(preview?.ddpQuoteUnitUsd)}</td>
+                    <td><input type="number" step="0.01" value={money(preview?.ddpQuoteUnitUsd)} onChange={(event) => updateDdpQuoteUnit(index, Number(event.target.value), preview?.ddpUnitPriceUsd ?? 0)} /></td>
                     <td className="numeric-cell">{money(preview?.revenueUsd)}</td>
                     <td className="numeric-cell">{money(preview?.operatingProfitUsd)}</td>
                     <td className="numeric-cell">{percent(preview?.grossMarginRate)}</td>
@@ -277,7 +277,7 @@ export default function QuotationGenerate() {
               <strong>{money(totals.totalCifUsd)}</strong>
             </div>
             <div>
-              <span>DDP合计(USD)</span>
+              <span>到仓总价</span>
               <strong>{money(totals.totalDdpUsd)}</strong>
             </div>
             <div>
@@ -314,6 +314,11 @@ export default function QuotationGenerate() {
       purchasePriceCny: product?.suggestedPrice ?? 0,
       enableNom: product?.needNom ?? false,
     });
+  }
+
+  function updateDdpQuoteUnit(index: number, quoteUnitUsd: number, warehouseUnitUsd: number) {
+    const markupRate = warehouseUnitUsd > 0 ? (quoteUnitUsd / warehouseUnitUsd - 1) * 100 : 0;
+    updateItem(index, { markupRate: Math.round(markupRate * 10_000) / 10_000 });
   }
 
   function updateParam(key: keyof typeof defaultParams, raw: string) {

@@ -24,20 +24,25 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
   const [rows, setRows] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [editing, setEditing] = useState<Partial<T> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  async function load() {
-    const result = await apiGet<PageResult<T>>(`${endpoint}?keyword=${encodeURIComponent(keyword)}&page=1&pageSize=20`);
+  async function load(nextPage = page, nextPageSize = pageSize) {
+    const result = await apiGet<PageResult<T>>(`${endpoint}?keyword=${encodeURIComponent(keyword)}&page=${nextPage}&pageSize=${nextPageSize}`);
     setRows(result.items);
     setTotal(result.total);
     setSelectedIds([]);
+    const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
+    if (nextPage > nextTotalPages) setPage(nextTotalPages);
   }
 
   useEffect(() => {
     load().catch((err) => setError(err.message));
-  }, []);
+  }, [page, pageSize]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,7 +97,10 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
       <div className="workspace-toolbar">
         <div className="search-group">
           <input className="search-input" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={`搜索${searchPlaceholder}`} />
-          <button className="primary-action search-action" onClick={() => load()}>搜索</button>
+          <button className="primary-action search-action" onClick={() => {
+            setPage(1);
+            if (page === 1) load().catch((err) => setError(err.message));
+          }}>搜索</button>
         </div>
         <div className="toolbar action-toolbar">
           <button className="primary-action" onClick={() => setEditing({})}>+ 新增</button>
@@ -149,6 +157,20 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="pagination-bar">
+        <span>第 {page} / {totalPages} 页</span>
+        <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
+        <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>下一页</button>
+        <label>
+          每页
+          <select value={pageSize} onChange={(event) => {
+            setPageSize(Number(event.target.value));
+            setPage(1);
+          }}>
+            {[10, 20, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
       </div>
       {editing && (
         <div className="modal-backdrop">
