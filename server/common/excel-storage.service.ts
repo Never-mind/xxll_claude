@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { utils, read, write } from 'xlsx';
 import type { PageResult } from '../../shared/api.interface.js';
@@ -9,7 +10,8 @@ type RowRecord = Record<string, unknown>;
 
 @Injectable()
 export class ExcelStorageService {
-  private readonly dataDir = join(process.cwd(), 'data');
+  private readonly dataDir = process.env.DATA_DIR || (process.env.VERCEL ? join(tmpdir(), 'quotation-data') : join(process.cwd(), 'data'));
+  private readonly seedDir = join(process.cwd(), 'data');
   private readonly queues = new Map<string, Promise<unknown>>();
 
   async readTable<T extends AnyRecord>(fileName: string): Promise<T[]> {
@@ -92,7 +94,21 @@ export class ExcelStorageService {
       if (!sheet) return [];
       return utils.sheet_to_json<T>(sheet, { defval: '' }).map((row) => this.normalizeRow(row));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        const seedPath = join(this.seedDir, fileName);
+        if (seedPath !== filePath) {
+          try {
+            const buffer = await readFile(seedPath);
+            const workbook = read(buffer, { type: 'buffer', cellDates: false });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            return sheet ? utils.sheet_to_json<T>(sheet, { defval: '' }).map((row) => this.normalizeRow(row)) : [];
+          } catch (seedError) {
+            if ((seedError as NodeJS.ErrnoException).code === 'ENOENT') return [];
+            throw seedError;
+          }
+        }
+        return [];
+      }
       throw error;
     }
   }

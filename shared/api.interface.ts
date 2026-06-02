@@ -34,6 +34,16 @@ export interface TariffRate {
   updatedAt: string;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  address?: string;
+  contactName?: string;
+  contactPhone?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HistoryQuotation {
   id: string;
   quotationDate: string;
@@ -73,6 +83,7 @@ export interface Quotation {
   totalProfitUsd: number;
   grossMarginRate: number;
   status: QuotationStatus;
+  customerId?: string;
   customerName?: string;
   remark?: string;
   createdAt: string;
@@ -141,6 +152,7 @@ export interface CreateQuotationDto {
   implementationFee: number;
   publicFeeTotal: number;
   status: QuotationStatus;
+  customerId?: string;
   customerName?: string;
   remark?: string;
   items: CreateQuotationItemDto[];

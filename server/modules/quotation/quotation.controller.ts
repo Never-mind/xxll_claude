@@ -25,6 +25,13 @@ export class QuotationController {
     return this.quotations.list(Number(page), Number(pageSize), status);
   }
 
+  @Get('export')
+  async exportList(@Query('status') status: string | undefined, @Res() response: Response) {
+    response.setHeader('Content-Disposition', 'attachment; filename=quotations.xlsx');
+    response.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    response.send(await this.quotations.exportList(status));
+  }
+
   @Get(':id')
   detail(@Param('id') id: string) {
     return this.quotations.detail(id);
