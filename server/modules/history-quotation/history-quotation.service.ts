@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ExcelStorageService } from '../../common/excel-storage.service.js';
+import { DatabaseStorageService } from '../../common/database-storage.service.js';
 import { rowsFromExcelBuffer, workbookBufferFromSheets } from '../../common/excel-utils.js';
 import { ProductService } from '../product/product.service.js';
 import type { HistoryQuotation, PageResult } from '../../../shared/api.interface.js';
@@ -10,7 +10,7 @@ const FILE = 'history_quotations.xlsx';
 @Injectable()
 export class HistoryQuotationService {
   constructor(
-    @Inject(ExcelStorageService) private readonly storage: ExcelStorageService,
+    @Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService,
     @Inject(ProductService) private readonly products: ProductService,
   ) {}
 

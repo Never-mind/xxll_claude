@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { workbookBufferFromSheets, rowsFromExcelBuffer } from '../../common/excel-utils.js';
-import { ExcelStorageService } from '../../common/excel-storage.service.js';
+import { workbookBufferFromSheets } from '../../common/excel-utils.js';
+import { DatabaseStorageService } from '../../common/database-storage.service.js';
+import { read, utils } from 'xlsx';
 import type { PageResult, Product } from '../../../shared/api.interface.js';
 
 type ProductInput = Omit<Product, 'id' | 'createdAt' | 'updatedAt'>;
@@ -8,7 +9,7 @@ const FILE = 'products.xlsx';
 
 @Injectable()
 export class ProductService {
-  constructor(@Inject(ExcelStorageService) private readonly storage: ExcelStorageService) {}
+  constructor(@Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService) {}
 
   async list(keyword = '', page = 1, pageSize = 10): Promise<PageResult<Product>> {
     const all = await this.storage.readTable<Product>(FILE);
@@ -55,12 +56,18 @@ export class ProductService {
   }
 
   async import(buffer: Buffer): Promise<{ imported: number; errors: string[] }> {
-    const rows = rowsFromExcelBuffer<Partial<ProductInput>>(buffer);
+    const rows = rowsFromProductExcel(buffer);
     const errors: string[] = [];
     let imported = 0;
     for (const [index, row] of rows.entries()) {
       try {
-        await this.create(row as ProductInput);
+        const input = withProductDefaults(row, index);
+        const existing = await this.findByCode(input.productCode);
+        if (existing) {
+          await this.update(existing.id, input);
+        } else {
+          await this.create(input);
+        }
         imported += 1;
       } catch (error) {
         errors.push(`Row ${index + 2}: ${(error as Error).message}`);
@@ -87,4 +94,102 @@ export class ProductService {
       needNom: Boolean(input.needNom),
     };
   }
+}
+
+function rowsFromProductExcel(buffer: Buffer): Partial<ProductInput>[] {
+  const workbook = read(buffer, { type: 'buffer' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) return [];
+  const [header = [], ...rows] = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+  return rows
+    .filter((row) => row.some((cell) => String(cell ?? '').trim()))
+    .map((row) => {
+      const dimensionsCell = pick(row, header, ['尺寸(cm)', '尺寸', 'dimensions'], 7);
+      const hasCombinedDimensions = /[x×*]/i.test(text(dimensionsCell));
+      const dimensions = parseDimensions(dimensionsCell);
+      const grossWeightIndex = hasCombinedDimensions ? 8 : 10;
+      const hsCodeCnIndex = hasCombinedDimensions ? 9 : 11;
+      const hsCodeMxIndex = hasCombinedDimensions ? 10 : 12;
+      const suggestedPriceIndex = hasCombinedDimensions ? 12 : 14;
+      const featuresIndex = hasCombinedDimensions ? 13 : 15;
+      const features = text(pick(row, header, ['特性', 'features'], featuresIndex));
+      return {
+        imageUrl: text(pick(row, header, ['图片', '图片URL', 'imageUrl'], 0)),
+        productCode: text(pick(row, header, ['产品编码', '产品编号', '编码', 'productCode'], 1)),
+        name: text(pick(row, header, ['产品名称', '名称', 'name'], 2)),
+        spec: text(pick(row, header, ['规格', 'spec'], 3)),
+        brand: text(pick(row, header, ['品牌', 'brand'], 4)),
+        category: text(pick(row, header, ['品类', 'category'], 5)),
+        unit: text(pick(row, header, ['单位', 'unit'], 6)) || '个',
+        length: numberOr(pick(row, header, ['长(cm)', '长', 'length'], hasCombinedDimensions ? -1 : 7), dimensions.length),
+        width: numberOr(pick(row, header, ['宽(cm)', '宽', 'width'], hasCombinedDimensions ? -1 : 8), dimensions.width),
+        height: numberOr(pick(row, header, ['高(cm)', '高', 'height'], hasCombinedDimensions ? -1 : 9), dimensions.height),
+        grossWeight: numberOr(pick(row, header, ['毛重(kg)', '毛重', '重量', 'grossWeight'], grossWeightIndex), 0),
+        hsCodeCn: text(pick(row, header, ['中国HS编码', '中国HS', '国内HS编码', 'hsCodeCn'], hsCodeCnIndex)),
+        hsCodeMx: text(pick(row, header, ['墨西哥HS编码', '墨西哥HS', 'HS编码', 'hsCodeMx'], hsCodeMxIndex)),
+        suggestedPrice: numberOr(pick(row, header, ['建议进价', '建议进价(CNY)', '进价', '采购价', 'suggestedPrice'], suggestedPriceIndex), 0),
+        isMagnetic: hasFeature(features, pick(row, header, ['带磁', '是否带磁', 'isMagnetic'], -1), '带磁'),
+        isElectric: hasFeature(features, pick(row, header, ['带电', '是否带电', 'isElectric'], -1), '带电'),
+        needNom: hasFeature(features, pick(row, header, ['需要NOM', '是否需要NOM', 'NOM认证', 'needNom'], -1), 'NOM'),
+      };
+    });
+}
+
+function withProductDefaults(row: Partial<ProductInput>, index: number): ProductInput {
+  const productCode = text(row.productCode) || `IMPORT-${Date.now()}-${index + 1}`;
+  return {
+    imageUrl: text(row.imageUrl),
+    productCode,
+    name: text(row.name) || productCode,
+    spec: text(row.spec),
+    brand: text(row.brand),
+    category: text(row.category),
+    unit: text(row.unit) || '个',
+    length: Number(row.length ?? 0),
+    width: Number(row.width ?? 0),
+    height: Number(row.height ?? 0),
+    grossWeight: Number(row.grossWeight ?? 0),
+    hsCodeCn: text(row.hsCodeCn),
+    hsCodeMx: text(row.hsCodeMx),
+    suggestedPrice: Number(row.suggestedPrice ?? 0),
+    isMagnetic: Boolean(row.isMagnetic),
+    isElectric: Boolean(row.isElectric),
+    needNom: Boolean(row.needNom),
+  };
+}
+
+function parseDimensions(value: unknown): { length: number; width: number; height: number } {
+  const [length = 0, width = 0, height = 0] = String(value ?? '')
+    .split(/[x×*]/i)
+    .map((part) => Number(part.trim() || 0));
+  return { length, width, height };
+}
+
+function text(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function pick(row: unknown[], header: unknown[], names: string[], fallbackIndex: number): unknown {
+  const normalizedNames = names.map(normalizeHeader);
+  const index = header.findIndex((cell) => normalizedNames.includes(normalizeHeader(cell)));
+  if (index >= 0) return row[index];
+  return fallbackIndex >= 0 ? row[fallbackIndex] : undefined;
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function hasFeature(features: string, value: unknown, keyword: string): boolean {
+  if (features.includes(keyword)) return true;
+  const normalized = text(value).toLowerCase();
+  return ['true', '1', 'yes', 'y', '是', '需要'].includes(normalized);
+}
+
+function normalizeHeader(value: unknown): string {
+  return text(value)
+    .replace(/[（）]/g, (match) => match === '（' ? '(' : ')')
+    .replace(/[\s_\-\/]/g, '')
+    .toLowerCase();
 }

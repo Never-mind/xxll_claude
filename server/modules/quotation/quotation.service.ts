@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ExcelStorageService } from '../../common/excel-storage.service.js';
+import { DatabaseStorageService } from '../../common/database-storage.service.js';
+import { CustomerService } from '../customer/customer.service.js';
 import { workbookBufferFromSheets } from '../../common/excel-utils.js';
 import { HistoryQuotationService } from '../history-quotation/history-quotation.service.js';
 import { ProductService } from '../product/product.service.js';
@@ -13,8 +14,9 @@ const ITEM_FILE = 'quotation_items.xlsx';
 @Injectable()
 export class QuotationService {
   constructor(
-    @Inject(ExcelStorageService) private readonly storage: ExcelStorageService,
+    @Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService,
     @Inject(ProductService) private readonly products: ProductService,
+    @Inject(CustomerService) private readonly customers: CustomerService,
     @Inject(TariffRateService) private readonly tariffs: TariffRateService,
     @Inject(HistoryQuotationService) private readonly history: HistoryQuotationService,
   ) {}
@@ -48,9 +50,13 @@ export class QuotationService {
   }
 
   async create(dto: CreateQuotationDto): Promise<QuotationDetail> {
+    const customer = dto.customerId ? await this.customers.findById(dto.customerId) : undefined;
+    if (!customer) throw new Error('Please select an archived customer');
     const calculated = calculateQuotation(dto, await this.products.all(), await this.tariffs.all());
     const quotation = await this.storage.insert<Quotation>(QUOTATION_FILE, {
       ...calculated.quotation,
+      customerId: customer.id,
+      customerName: customer.name,
       quotationNo: await this.nextQuotationNo(),
     });
     const items: QuotationItem[] = [];
@@ -63,9 +69,14 @@ export class QuotationService {
 
   async update(id: string, dto: CreateQuotationDto): Promise<QuotationDetail> {
     const existing = await this.detail(id);
+    if (existing.quotation.status === 'completed') throw new Error('Completed quotations cannot be edited');
+    const customer = dto.customerId ? await this.customers.findById(dto.customerId) : undefined;
+    if (!customer) throw new Error('Please select an archived customer');
     const calculated = calculateQuotation(dto, await this.products.all(), await this.tariffs.all());
     const quotation = await this.storage.update<Quotation>(QUOTATION_FILE, id, {
       ...calculated.quotation,
+      customerId: customer.id,
+      customerName: customer.name,
       quotationNo: existing.quotation.quotationNo,
     });
     for (const item of existing.items) await this.storage.delete(ITEM_FILE, item.id);
@@ -90,6 +101,11 @@ export class QuotationService {
       报价参数: Object.entries(detail.quotation).map(([参数名, 值]) => ({ 参数名, 值 })),
       报价明细: detail.items,
     });
+  }
+
+  async exportList(status?: string): Promise<Buffer> {
+    const rows = await this.list(1, 50, status);
+    return workbookBufferFromSheets({ quotations: rows.items });
   }
 
   private async nextQuotationNo(): Promise<string> {

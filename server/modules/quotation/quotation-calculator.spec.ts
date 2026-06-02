@@ -38,12 +38,17 @@ describe('calculateQuotation', () => {
 
     const result = calculateQuotation(dto, products, tariffs);
 
-    expect(result.quotation.totalCifUsd).toBeCloseTo(388.2372, 4);
-    expect(result.items[0].publicFeeAllocationUsd).toBeCloseTo(86.0449, 4);
-    expect(result.items[1].publicFeeAllocationUsd).toBeCloseTo(63.9551, 4);
-    expect(result.quotation.totalDdpUsd).toBeCloseTo(709.1436, 4);
-    expect(result.quotation.totalRevenueUsd).toBeCloseTo(846.0472, 4);
-    expect(result.quotation.totalProfitUsd).toBeCloseTo(136.9037, 4);
+    expect(result.quotation.publicFeeTotal).toBe(100);
+    expect(result.items[0].firstMileFreightCny).toBeCloseTo(320000, 4);
+    expect(result.items[1].firstMileFreightCny).toBeCloseTo(600, 4);
+    expect(result.quotation.totalCifUsd).toBeCloseTo(46056.6372, 4);
+    expect(result.items[0].publicFeeAllocationUsd).toBeCloseTo(99.641, 4);
+    expect(result.items[1].publicFeeAllocationUsd).toBeCloseTo(0.359, 4);
+    expect(result.items[0].ddpUnitPriceUsd).toBeCloseTo(26257.8483, 4);
+    expect(result.items[0].revenueUsd).toBeCloseTo(65644.6207, 4);
+    expect(result.quotation.totalDdpUsd).toBeCloseTo(52721.1024, 4);
+    expect(result.quotation.totalRevenueUsd).toBeCloseTo(65870.5671, 4);
+    expect(result.quotation.totalProfitUsd).toBeCloseTo(13149.4647, 4);
   });
 });
 
