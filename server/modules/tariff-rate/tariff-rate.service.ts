@@ -40,12 +40,18 @@ export class TariffRateService {
   }
 
   async create(input: TariffInput): Promise<TariffRate> {
+    if (!String(input.deviceType || '').trim()) throw new Error('Device type is required');
     const exists = await this.byDeviceType(input.deviceType);
     if (exists) throw new Error(`Device type ${input.deviceType} already exists`);
     return this.storage.insert<TariffRate>(FILE, this.normalize(input));
   }
 
-  update(id: string, input: Partial<TariffInput>): Promise<TariffRate> {
+  async update(id: string, input: Partial<TariffInput>): Promise<TariffRate> {
+    if (input.deviceType !== undefined) {
+      if (!String(input.deviceType || '').trim()) throw new Error('Device type is required');
+      const exists = await this.byDeviceType(input.deviceType);
+      if (exists && exists.id !== id) throw new Error(`Device type ${input.deviceType} already exists`);
+    }
     return this.storage.update<TariffRate>(FILE, id, this.normalize(input));
   }
 
@@ -69,12 +75,20 @@ export class TariffRateService {
   }
 
   async export(): Promise<Buffer> {
-    return workbookBufferFromSheets({ tariff_rates: await this.all() });
+    const rows = (await this.all()).map((rate) => ({
+      设备类型: rate.deviceType,
+      HS编码: rate.hsCode,
+      '税率(%)': rate.taxRate,
+      需要NOM: rate.needNom ? '是' : '否',
+    }));
+    return workbookBufferFromSheets({ 关税税率管理: rows });
   }
 
   private normalize<T extends Partial<TariffInput>>(input: T): T {
     return {
       ...input,
+      deviceType: input.deviceType?.trim(),
+      hsCode: input.hsCode?.trim(),
       taxRate: Number(input.taxRate ?? 0),
       needNom: Boolean(input.needNom),
     };

@@ -74,14 +74,15 @@ export default function QuotationList() {
               </th>
               <th>报价单号</th>
               <th>客户</th>
+              <th>项目名称</th>
               <th>状态</th>
               <th>CIF(USD)</th>
-              <th>DDP(USD)</th>
+              <th>到仓总价（USD）</th>
               <th>收入(USD)</th>
               <th>利润(USD)</th>
               <th>毛利率</th>
               <th>创建时间</th>
-              <th>操作</th>
+              <th className="actions">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -97,6 +98,7 @@ export default function QuotationList() {
                 </td>
                 <td>{row.quotationNo}</td>
                 <td>{row.customerName || '-'}</td>
+                <td>{row.remark || '-'}</td>
                 <td><span className={`badge ${row.status}`}>{row.status}</span></td>
                 <td>{money(row.totalCifUsd)}</td>
                 <td>{money(row.totalDdpUsd)}</td>
@@ -108,6 +110,7 @@ export default function QuotationList() {
                   <Link to={`/quotation/detail/${row.id}`}>查看</Link>
                   {row.status === 'draft' && <Link to={`/quotation/generate/${row.id}`}>修改</Link>}
                   <button onClick={() => download(`/quotations/${row.id}/export`)}>导出</button>
+                  <button onClick={() => download(`/quotations/${row.id}/export-formal`)}>导出报价单</button>
                 </td>
               </tr>
             ))}

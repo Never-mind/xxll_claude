@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import { apiGet, apiWrite, download, upload } from '../api.js';
+import FeedbackDialog from '../components/FeedbackDialog.js';
 import type { PageResult } from '../../../shared/api.interface.js';
 
 export interface FieldConfig {
@@ -53,9 +54,22 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
         return [field.key, field.type === 'number' ? Number(value || 0) : value];
       }),
     );
-    await apiWrite(`${endpoint}${editing?.id ? `/${editing.id}` : ''}`, editing?.id ? 'PUT' : 'POST', payload);
-    setEditing(null);
-    await load();
+    try {
+      await apiWrite(`${endpoint}${editing?.id ? `/${editing.id}` : ''}`, editing?.id ? 'PUT' : 'POST', payload);
+      setEditing(null);
+      await load();
+    } catch (err) {
+      const message = (err as Error).message;
+      if (endpoint === '/products' && !editing?.id && /already exists|duplicate|重复/i.test(message)) {
+        setError('产品已存在');
+      } else if (endpoint === '/customers' && !editing?.id && /already exists|duplicate|重复/i.test(message)) {
+        setError('客户已存在');
+      } else if (endpoint === '/tariff-rates' && /already exists|duplicate|重复/i.test(message)) {
+        setError('设备类型已存在');
+      } else {
+        setError(message);
+      }
+    }
   }
 
   async function remove(id: string) {
@@ -78,11 +92,10 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
     event.target.value = '';
     if (!file) return;
     const result = await upload(`${endpoint}/import`, file);
-    if (result.errors.length) {
-      setError(`导入 ${result.imported} 条，${result.errors.length} 条失败：${result.errors.slice(0, 3).join('；')}`);
-    } else {
-      setError('');
-    }
+    setError([
+      `导入成功 ${result.imported} 条数据，失败 ${result.errors.length} 条数据。`,
+      result.errors.length ? `失败原因：${result.errors.slice(0, 3).join('；')}` : '',
+    ].filter(Boolean).join('\n'));
     await load();
   }
 
@@ -112,7 +125,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
           <button onClick={() => download(`${endpoint}/export`)}>导出</button>
         </div>
       </div>
-      {error && <div className="alert">{error}</div>}
+      <FeedbackDialog message={error} onClose={() => setError('')} />
       <div className="table-wrap">
         <table>
           <thead>
@@ -128,7 +141,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
                 </th>
               )}
               {columns.map((column) => <th key={column.key}>{column.label}</th>)}
-              <th>操作</th>
+              <th className="actions">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -206,7 +219,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
                       {field.options?.map((option) => <option key={option}>{option}</option>)}
                     </select>
                   ) : (
-                    <input type={field.type ?? 'text'} step={field.step} name={field.key} defaultValue={String(editing[field.key as keyof T] ?? '')} />
+                    <input type={field.type ?? 'text'} step={field.type === 'number' ? field.step ?? 'any' : field.step} name={field.key} defaultValue={formatInputDefault(editing[field.key as keyof T], field)} />
                   )}
                 </label>
               ))}
@@ -240,7 +253,36 @@ function formatCell(value: unknown, column: FieldConfig) {
       </div>
     ) : '';
   }
+  if (column.key === 'contacts') {
+    const row = value as Record<string, unknown>;
+    const contacts = [
+      ['联系方式1', row.contactName1, row.contactPhone1],
+      ['联系方式2', row.contactName2, row.contactPhone2],
+    ].filter(([, name, phone]) => String(name ?? '').trim() || String(phone ?? '').trim());
+    return contacts.length ? (
+      <div className="contact-list">
+        {contacts.map(([label, name, phone]) => (
+          <div key={String(label)}>
+            <span>{String(name || '-')}：{String(phone || '-')}</span>
+          </div>
+        ))}
+      </div>
+    ) : '';
+  }
   if (typeof value === 'boolean') return value ? '是' : '否';
-  if (typeof value === 'number') return Number.isInteger(value) ? value : value.toFixed(2);
+  if (typeof value === 'number') return isQuantityLikeColumn(column.key) ? integer(value) : value.toFixed(2);
   return String(value ?? '');
+}
+
+function formatInputDefault(value: unknown, field: FieldConfig) {
+  if (value === undefined || value === null || value === '') return '';
+  return String(value);
+}
+
+function integer(value = 0) {
+  return String(Math.trunc(Number(value || 0)));
+}
+
+function isQuantityLikeColumn(key: string) {
+  return /(^|_)(qty|quantity)(_|$)|purchaseQty|plannedQty|数量/i.test(key);
 }

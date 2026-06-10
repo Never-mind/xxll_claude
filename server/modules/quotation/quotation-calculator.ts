@@ -26,9 +26,14 @@ export function calculateQuotation(
     if (!product) throw new Error(`Product ${item.productId} not found`);
     const tariff = tariffs.find((candidate) => candidate.hsCode === product.hsCodeMx);
     const purchaseQty = Number(item.purchaseQty);
-    const purchasePriceCny = Number(item.purchasePriceCny);
+    const purchasePriceExclTaxCny = item.purchasePriceExclTaxCny === undefined
+      ? safeDivide(Number(item.purchasePriceCny), 1.13)
+      : Number(item.purchasePriceExclTaxCny);
+    const purchasePriceCny = item.purchasePriceCny === undefined
+      ? purchasePriceExclTaxCny * 1.13
+      : Number(item.purchasePriceCny);
     const totalTaxIncludedCny = purchaseQty * purchasePriceCny;
-    const totalExclTaxCny = totalTaxIncludedCny / 1.13;
+    const totalExclTaxCny = purchaseQty * purchasePriceExclTaxCny;
     const vatInputCny = totalTaxIncludedCny - totalExclTaxCny;
     const length = Number(product.length || 0);
     const width = Number(product.width || 0);
@@ -39,7 +44,7 @@ export function calculateQuotation(
       item.transportType === 'air'
         ? chargeableWeight * dto.airFreightRate * purchaseQty
         : item.transportType === 'sea'
-          ? length * width * height / 1000 * purchaseQty * dto.seaFreightRate
+          ? length * width * height / 1000000 * dto.seaFreightRate * purchaseQty
           : 0;
     const cifCny = totalExclTaxCny + firstMileFreightCny;
     const cifUsd = safeDivide(cifCny, dto.exchangeRateUsd);
@@ -50,14 +55,22 @@ export function calculateQuotation(
     const enableNom = Boolean(item.enableNom ?? product.needNom ?? tariff?.needNom);
     const nomFeeUsd = enableNom && item.isCustomsClearance ? dto.nomFee : 0;
     const ddpTotalUsd = cifUsd + tariffUsd + capitalCostUsd + customsFeeUsd + nomFeeUsd;
-    const markupRate = Number(item.markupRate ?? dto.markupRate);
-    const revenueUsd = safeDivide(ddpTotalUsd, purchaseQty) * (1 + markupRate / 100) * purchaseQty;
+    const ddpUnitPriceUsd = safeDivide(ddpTotalUsd, purchaseQty);
+    const manualQuoteUnitUsd = normalizeOptionalNumber(item.ddpQuoteUnitUsd);
+    const markupRate = manualQuoteUnitUsd === undefined
+      ? Number(item.markupRate ?? dto.markupRate)
+      : ddpUnitPriceUsd > 0
+        ? (manualQuoteUnitUsd / ddpUnitPriceUsd - 1) * 100
+        : 0;
+    const ddpQuoteUnitUsd = manualQuoteUnitUsd ?? ddpUnitPriceUsd * (1 + markupRate / 100);
+    const revenueUsd = ddpQuoteUnitUsd * purchaseQty;
     const operatingProfitUsd = revenueUsd - ddpTotalUsd;
 
     return {
       productId: product.id,
       productCode: product.productCode,
       productName: product.name,
+      brand: product.brand || '',
       purchaseQty,
       purchasePriceCny,
       totalTaxIncludedCny,
@@ -75,7 +88,8 @@ export function calculateQuotation(
       nomFeeUsd,
       publicFeeAllocationUsd: 0,
       ddpTotalUsd,
-      ddpUnitPriceUsd: safeDivide(ddpTotalUsd, purchaseQty),
+      ddpUnitPriceUsd,
+      ddpQuoteUnitUsd: manualQuoteUnitUsd,
       revenueUsd,
       operatingProfitUsd,
       grossMarginRate: revenueUsd > 0 ? operatingProfitUsd / revenueUsd * 100 : 0,
@@ -89,13 +103,16 @@ export function calculateQuotation(
   const items = initialItems.map((item) => {
     const allocation = totalCifUsd > 0 ? publicFeeTotal * item.cifUsd / totalCifUsd : 0;
     const ddpTotalUsd = item.ddpTotalUsd + allocation;
-    const revenueUsd = safeDivide(ddpTotalUsd, item.purchaseQty) * (1 + item.markupRate / 100) * item.purchaseQty;
+    const ddpUnitPriceUsd = safeDivide(ddpTotalUsd, item.purchaseQty);
+    const effectiveQuoteUnitUsd = item.ddpQuoteUnitUsd ?? ddpUnitPriceUsd * (1 + item.markupRate / 100);
+    const revenueUsd = effectiveQuoteUnitUsd * item.purchaseQty;
     const operatingProfitUsd = revenueUsd - ddpTotalUsd;
     return roundObject({
       ...item,
       publicFeeAllocationUsd: allocation,
       ddpTotalUsd,
-      ddpUnitPriceUsd: safeDivide(ddpTotalUsd, item.purchaseQty),
+      ddpUnitPriceUsd,
+      ddpQuoteUnitUsd: item.ddpQuoteUnitUsd,
       revenueUsd,
       operatingProfitUsd,
       grossMarginRate: revenueUsd > 0 ? operatingProfitUsd / revenueUsd * 100 : 0,
@@ -122,6 +139,12 @@ export function calculateQuotation(
 
 function safeDivide(value: number, divisor: number): number {
   return divisor ? value / divisor : 0;
+}
+
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function roundObject<T extends Record<string, unknown>>(input: T): T {

@@ -63,6 +63,12 @@ export class CustomerService {
   }
 
   async export(): Promise<Buffer> {
-    return workbookBufferFromSheets({ customers: await this.all() });
+    const rows = (await this.all()).map((customer) => ({
+      客户名称: customer.name,
+      客户地址: customer.address || '',
+      客户联系人: customer.contactName || '',
+      客户联系方式: customer.contactPhone || '',
+    }));
+    return workbookBufferFromSheets({ 客户列表: rows });
   }
 }

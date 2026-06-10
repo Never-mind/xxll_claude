@@ -77,7 +77,24 @@ export class ProductService {
   }
 
   async export(): Promise<Buffer> {
-    return workbookBufferFromSheets({ products: await this.all() });
+    const rows = (await this.all()).map((product) => ({
+      图片: product.imageUrl || '',
+      产品编码: product.productCode,
+      产品名称: product.name,
+      规格: product.spec || '',
+      品牌: product.brand || '',
+      品类: product.category || '',
+      单位: product.unit,
+      '尺寸(cm)': `${product.length || 0}×${product.width || 0}×${product.height || 0}`,
+      '毛重(kg)': product.grossWeight,
+      中国HS编码: product.hsCodeCn || '',
+      墨西哥HS编码: product.hsCodeMx || '',
+      '墨西哥关税(%)': '',
+      建议进价: product.suggestedPrice,
+      联系方式: contactText(product),
+      特性: featureText(product),
+    }));
+    return workbookBufferFromSheets({ 产品管理: rows });
   }
 
   private normalize<T extends Partial<ProductInput>>(input: T): T {
@@ -126,9 +143,13 @@ function rowsFromProductExcel(buffer: Buffer): Partial<ProductInput>[] {
         height: numberOr(pick(row, header, ['高(cm)', '高', 'height'], hasCombinedDimensions ? -1 : 9), dimensions.height),
         grossWeight: numberOr(pick(row, header, ['毛重(kg)', '毛重', '重量', 'grossWeight'], grossWeightIndex), 0),
         hsCodeCn: text(pick(row, header, ['中国HS编码', '中国HS', '国内HS编码', 'hsCodeCn'], hsCodeCnIndex)),
-        hsCodeMx: text(pick(row, header, ['墨西哥HS编码', '墨西哥HS', 'HS编码', 'hsCodeMx'], hsCodeMxIndex)),
-        suggestedPrice: numberOr(pick(row, header, ['建议进价', '建议进价(CNY)', '进价', '采购价', 'suggestedPrice'], suggestedPriceIndex), 0),
-        isMagnetic: hasFeature(features, pick(row, header, ['带磁', '是否带磁', 'isMagnetic'], -1), '带磁'),
+      hsCodeMx: text(pick(row, header, ['墨西哥HS编码', '墨西哥HS', 'HS编码', 'hsCodeMx'], hsCodeMxIndex)),
+      suggestedPrice: numberOr(pick(row, header, ['建议进价', '建议进价(CNY)', '进价', '采购价', 'suggestedPrice'], suggestedPriceIndex), 0),
+        contactName1: text(pick(row, header, ['联系人姓名1', '联系人1', 'contactName1'], -1)),
+        contactPhone1: text(pick(row, header, ['联系方式1', '联系电话1', '电话1', 'contactPhone1'], -1)),
+        contactName2: text(pick(row, header, ['联系人姓名2', '联系人2', 'contactName2'], -1)),
+        contactPhone2: text(pick(row, header, ['联系方式2', '联系电话2', '电话2', 'contactPhone2'], -1)),
+      isMagnetic: hasFeature(features, pick(row, header, ['带磁', '是否带磁', 'isMagnetic'], -1), '带磁'),
         isElectric: hasFeature(features, pick(row, header, ['带电', '是否带电', 'isElectric'], -1), '带电'),
         needNom: hasFeature(features, pick(row, header, ['需要NOM', '是否需要NOM', 'NOM认证', 'needNom'], -1), 'NOM'),
       };
@@ -152,6 +173,10 @@ function withProductDefaults(row: Partial<ProductInput>, index: number): Product
     hsCodeCn: text(row.hsCodeCn),
     hsCodeMx: text(row.hsCodeMx),
     suggestedPrice: Number(row.suggestedPrice ?? 0),
+    contactName1: text(row.contactName1),
+    contactPhone1: text(row.contactPhone1),
+    contactName2: text(row.contactName2),
+    contactPhone2: text(row.contactPhone2),
     isMagnetic: Boolean(row.isMagnetic),
     isElectric: Boolean(row.isElectric),
     needNom: Boolean(row.needNom),
@@ -192,4 +217,22 @@ function normalizeHeader(value: unknown): string {
     .replace(/[（）]/g, (match) => match === '（' ? '(' : ')')
     .replace(/[\s_\-\/]/g, '')
     .toLowerCase();
+}
+
+function contactText(product: Pick<Product, 'contactName1' | 'contactPhone1' | 'contactName2' | 'contactPhone2'>): string {
+  return [
+    [product.contactName1, product.contactPhone1],
+    [product.contactName2, product.contactPhone2],
+  ]
+    .filter(([name, phone]) => name || phone)
+    .map(([name, phone]) => `${name || ''}${name && phone ? '：' : ''}${phone || ''}`)
+    .join('\n');
+}
+
+function featureText(product: Pick<Product, 'isMagnetic' | 'isElectric' | 'needNom'>): string {
+  return [
+    product.isMagnetic ? '带磁' : '',
+    product.isElectric ? '带电' : '',
+    product.needNom ? 'NOM认证' : '',
+  ].filter(Boolean).join('、');
 }

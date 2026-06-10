@@ -19,6 +19,10 @@ const fields: FieldConfig[] = [
   { key: 'hsCodeCn', label: '中国HS编码' },
   { key: 'hsCodeMx', label: '墨西哥HS编码' },
   { key: 'suggestedPrice', label: '建议进价(CNY)', type: 'number' },
+  { key: 'contactName1', label: '联系人姓名1' },
+  { key: 'contactPhone1', label: '联系方式1' },
+  { key: 'contactName2', label: '联系人姓名2' },
+  { key: 'contactPhone2', label: '联系方式2' },
   { key: 'isMagnetic', label: '带磁', type: 'checkbox' },
   { key: 'isElectric', label: '带电', type: 'checkbox' },
   { key: 'needNom', label: '需要NOM', type: 'checkbox' },
@@ -38,6 +42,7 @@ const columns: FieldConfig[] = [
   { key: 'hsCodeMx', label: '墨西哥HS编码' },
   { key: 'mxTaxRate', label: '墨西哥关税(%)' },
   { key: 'suggestedPrice', label: '建议进价' },
+  { key: 'contacts', label: '联系方式' },
   { key: 'features', label: '特性' },
 ];
 
@@ -63,6 +68,7 @@ export default function ProductManage() {
           return rate === undefined ? '' : `${Number(rate).toFixed(2)}%`;
         }
         if (column.key === 'features') return row;
+        if (column.key === 'contacts') return row;
         return row[column.key as keyof Product];
       }}
     />

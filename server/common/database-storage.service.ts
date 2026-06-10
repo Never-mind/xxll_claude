@@ -13,17 +13,25 @@ const TABLES: Record<string, string> = {
   'history_quotations.xlsx': 'history_quotations',
   'quotations.xlsx': 'quotations',
   'quotation_items.xlsx': 'quotation_items',
+  'settlement_projects.xlsx': 'settlement_projects',
+  'settlement_items.xlsx': 'settlement_items',
+  'settlement_expenses.xlsx': 'settlement_expenses',
+  'settlement_sales.xlsx': 'settlement_sales',
+  'settlement_invoices.xlsx': 'settlement_invoices',
+  'settlement_attachments.xlsx': 'settlement_attachments',
 };
 
 const BOOLEAN_FIELDS: Record<string, string[]> = {
   products: ['isMagnetic', 'isElectric', 'needNom'],
   tariff_rates: ['needNom'],
   quotation_items: ['isCustomsClearance', 'enableNom'],
+  settlement_items: ['ordered'],
 };
 
 @Injectable()
 export class DatabaseStorageService {
   private static pool: Pool | undefined;
+  private static schemaReady: Promise<void> | undefined;
 
   static async closePool(): Promise<void> {
     if (!DatabaseStorageService.pool) return;
@@ -32,12 +40,14 @@ export class DatabaseStorageService {
   }
 
   async readTable<T extends AnyRecord>(fileName: string): Promise<T[]> {
+    await this.ensureSchema();
     const table = tableFor(fileName);
     const [rows] = await this.pool().query<RowDataPacket[]>(`SELECT * FROM ${quoteId(table)} ORDER BY ${quoteId('createdAt')} ASC, ${quoteId('id')} ASC`);
     return rows.map((row) => normalizeRow<T>(table, row as RowRecord));
   }
 
   async writeTable<T extends AnyRecord>(fileName: string, data: T[]): Promise<void> {
+    await this.ensureSchema();
     const table = tableFor(fileName);
     const connection = await this.pool().getConnection();
     try {
@@ -56,6 +66,7 @@ export class DatabaseStorageService {
   }
 
   async query<T extends AnyRecord>(fileName: string, where: Partial<T>): Promise<T[]> {
+    await this.ensureSchema();
     const table = tableFor(fileName);
     const entries = Object.entries(where as RowRecord).filter(([, value]) => value !== undefined);
     const params = entries.map(([, value]) => toDbValue(value));
@@ -83,6 +94,7 @@ export class DatabaseStorageService {
   }
 
   async update<T extends AnyRecord>(fileName: string, id: string, data: Partial<T>): Promise<T> {
+    await this.ensureSchema();
     const table = tableFor(fileName);
     const patch = { ...(data as RowRecord), updatedAt: new Date().toISOString() };
     const entries = Object.entries(patch).filter(([key, value]) => key !== 'id' && value !== undefined);
@@ -101,6 +113,7 @@ export class DatabaseStorageService {
   }
 
   async delete(fileName: string, id: string): Promise<void> {
+    await this.ensureSchema();
     const table = tableFor(fileName);
     await this.pool().query(`DELETE FROM ${quoteId(table)} WHERE ${quoteId('id')} = ?`, [id]);
   }
@@ -141,7 +154,69 @@ export class DatabaseStorageService {
     return DatabaseStorageService.pool;
   }
 
+  private async ensureSchema(): Promise<void> {
+    if (!DatabaseStorageService.schemaReady) {
+      DatabaseStorageService.schemaReady = this.applySchemaUpdates();
+    }
+    return DatabaseStorageService.schemaReady;
+  }
+
+  private async applySchemaUpdates(): Promise<void> {
+    await ensureColumn(this.pool(), 'quotation_items', 'ddpQuoteUnitUsd', 'DECIMAL(14,4) NULL AFTER `ddpUnitPriceUsd`');
+    await ensureColumn(this.pool(), 'quotation_items', 'brand', 'VARCHAR(255) NULL AFTER `productName`');
+    await ensureColumn(this.pool(), 'settlement_items', 'brand', 'VARCHAR(255) NULL AFTER `productName`');
+    await ensureColumn(this.pool(), 'settlement_items', 'invoiceNo', 'VARCHAR(100) NULL AFTER `receivedRevenueUsd`');
+    await ensureColumn(this.pool(), 'settlement_items', 'invoiceEntity', 'VARCHAR(255) NULL AFTER `receivedRevenueUsd`');
+    await ensureColumn(this.pool(), 'settlement_items', 'invoiceDate', 'VARCHAR(32) NULL AFTER `invoiceEntity`');
+    await ensureColumn(this.pool(), 'settlement_items', 'invoiceExchangeRate', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `invoiceDate`');
+    await ensureColumn(this.pool(), 'settlement_expenses', 'invoiceNo', 'VARCHAR(100) NULL AFTER `costUsd`');
+    await ensureColumn(this.pool(), 'settlement_expenses', 'invoiceEntity', 'VARCHAR(255) NULL AFTER `costUsd`');
+    await ensureColumn(this.pool(), 'settlement_expenses', 'invoiceDate', 'VARCHAR(32) NULL AFTER `invoiceEntity`');
+    await ensureColumn(this.pool(), 'settlement_expenses', 'invoiceExchangeRate', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `invoiceDate`');
+    await ensureColumn(this.pool(), 'settlement_sales', 'invoiceNo', 'VARCHAR(100) NULL AFTER `receivedRevenueUsd`');
+    await ensureColumn(this.pool(), 'settlement_sales', 'invoiceEntity', 'VARCHAR(255) NULL AFTER `receivedRevenueUsd`');
+    await ensureColumn(this.pool(), 'settlement_sales', 'invoiceDate', 'VARCHAR(32) NULL AFTER `invoiceEntity`');
+    await ensureColumn(this.pool(), 'settlement_sales', 'invoiceExchangeRate', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `invoiceDate`');
+    await ensureTable(this.pool(), 'settlement_invoices', `
+      CREATE TABLE IF NOT EXISTS ${quoteId('settlement_invoices')} (
+        ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+        ${quoteId('projectId')} CHAR(36) NOT NULL,
+        ${quoteId('type')} VARCHAR(20) NOT NULL DEFAULT 'cost',
+        ${quoteId('accountPeriod')} VARCHAR(100) NULL,
+        ${quoteId('invoiceEntity')} VARCHAR(255) NULL,
+        ${quoteId('invoiceDate')} VARCHAR(32) NULL,
+        ${quoteId('invoiceNo')} VARCHAR(100) NULL,
+        ${quoteId('invoiceTotal')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('invoiceTaxExcludedTotal')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('taxRate')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('invoiceTaxAmount')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('currency')} VARCHAR(10) NOT NULL DEFAULT 'CNY',
+        ${quoteId('exchangeRate')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('usdAmount')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+        ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+        INDEX ${quoteId('idx_settlement_invoices_project')} (${quoteId('projectId')})
+      )
+    `);
+    await ensureTable(this.pool(), 'settlement_attachments', `
+      CREATE TABLE IF NOT EXISTS ${quoteId('settlement_attachments')} (
+        ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+        ${quoteId('projectId')} CHAR(36) NOT NULL,
+        ${quoteId('fileName')} VARCHAR(255) NOT NULL,
+        ${quoteId('fileType')} VARCHAR(120) NULL,
+        ${quoteId('fileSize')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('dataUrl')} LONGTEXT NOT NULL,
+        ${quoteId('description')} VARCHAR(255) NULL,
+        ${quoteId('uploadedAt')} VARCHAR(32) NOT NULL,
+        ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+        ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+        INDEX ${quoteId('idx_settlement_attachments_project')} (${quoteId('projectId')})
+      )
+    `);
+  }
+
   private async insertIntoTable(table: string, row: RowRecord, executor: Pick<Pool, 'query'> = this.pool()): Promise<void> {
+    await this.ensureSchema();
     const entries = Object.entries(row).filter(([, value]) => value !== undefined);
     if (!entries.length) return;
     await executor.query(
@@ -149,6 +224,24 @@ export class DatabaseStorageService {
       entries.map(([, value]) => toDbValue(value)),
     );
   }
+}
+
+async function ensureColumn(pool: Pool, table: string, column: string, definition: string): Promise<void> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS count FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column],
+  );
+  if (Number(rows[0]?.count || 0) > 0) return;
+  await pool.query(`ALTER TABLE ${quoteId(table)} ADD COLUMN ${quoteId(column)} ${definition}`);
+}
+
+async function ensureTable(pool: Pool, table: string, createSql: string): Promise<void> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT COUNT(*) AS count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+    [table],
+  );
+  if (Number(rows[0]?.count || 0) > 0) return;
+  await pool.query(createSql);
 }
 
 function tableFor(fileName: string): string {

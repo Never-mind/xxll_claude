@@ -54,6 +54,13 @@ export class QuotationController {
     response.send(await this.quotations.export(id));
   }
 
+  @Get(':id/export-formal')
+  async exportFormal(@Param('id') id: string, @Res() response: Response) {
+    response.setHeader('Content-Disposition', `attachment; filename=formal-quotation-${id}.xlsx`);
+    response.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    response.send(await this.quotations.exportFormalQuotation(id));
+  }
+
   @Delete(':id')
   @UseGuards(WriteAuthGuard)
   remove(@Param('id') id: string) {

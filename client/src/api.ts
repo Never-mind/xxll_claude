@@ -1,4 +1,26 @@
-import type { CreateQuotationDto, PageResult, Product, Quotation, QuotationDetail, TariffRate, HistoryQuotation, Customer } from '../../shared/api.interface.js';
+import type {
+  CreateQuotationDto,
+  CreateSettlementAttachmentDto,
+  CreateSettlementExpenseDto,
+  CreateSettlementInvoiceDto,
+  CreateSettlementSaleDto,
+  Customer,
+  FinanceInvoiceRow,
+  HistoryQuotation,
+  PageResult,
+  Product,
+  Quotation,
+  QuotationDetail,
+  SettlementItem,
+  SettlementOrderDto,
+  SettlementProject,
+  SettlementProjectDetail,
+  TariffRate,
+  UpdateSettlementExpenseDto,
+  UpdateSettlementInvoiceDto,
+  UpdateSettlementItemDto,
+  UpdateSettlementSaleDto,
+} from '../../shared/api.interface.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -38,4 +60,27 @@ export type TariffPage = PageResult<TariffRate>;
 export type QuotationPage = PageResult<Quotation>;
 export type HistoryPage = PageResult<HistoryQuotation>;
 export type CustomerPage = PageResult<Customer>;
-export type { Product, TariffRate, HistoryQuotation, Quotation, QuotationDetail, CreateQuotationDto, Customer };
+export type SettlementProjectPage = PageResult<SettlementProject>;
+export type FinanceInvoicePage = PageResult<FinanceInvoiceRow>;
+export type {
+  Product,
+  TariffRate,
+  HistoryQuotation,
+  Quotation,
+  QuotationDetail,
+  CreateQuotationDto,
+  Customer,
+  FinanceInvoiceRow,
+  SettlementItem,
+  SettlementOrderDto,
+  SettlementProject,
+  SettlementProjectDetail,
+  CreateSettlementAttachmentDto,
+  CreateSettlementExpenseDto,
+  CreateSettlementInvoiceDto,
+  CreateSettlementSaleDto,
+  UpdateSettlementExpenseDto,
+  UpdateSettlementInvoiceDto,
+  UpdateSettlementItemDto,
+  UpdateSettlementSaleDto,
+};

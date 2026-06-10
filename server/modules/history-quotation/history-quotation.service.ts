@@ -17,11 +17,12 @@ export class HistoryQuotationService {
   async list(keyword = '', page = 1, pageSize = 10): Promise<PageResult<HistoryQuotation>> {
     const all = await this.enrichedRows();
     const q = keyword.trim().toLowerCase();
-    const filtered = q
+    const filtered = (q
       ? all.filter((item) =>
           [item.customerName, item.productCode, item.productName].some((value) => value.toLowerCase().includes(q)),
         )
-      : all;
+      : all)
+      .sort((left, right) => Date.parse(right.quotationDate || right.createdAt || '') - Date.parse(left.quotationDate || left.createdAt || ''));
     const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
     const safePage = Math.max(1, Number(page) || 1);
     return {
@@ -64,7 +65,17 @@ export class HistoryQuotationService {
   }
 
   async export(): Promise<Buffer> {
-    return workbookBufferFromSheets({ history_quotations: await this.all() });
+    const rows = (await this.all()).map((history) => ({
+      报价日期: history.quotationDate,
+      客户名称: history.customerName,
+      产品编码: history.productCode,
+      产品名称: history.productName,
+      规格: history.spec || '',
+      品牌: history.brand || '',
+      运输方式: history.transportType,
+      '客户报价(USD)': history.customerPriceUsd,
+    }));
+    return workbookBufferFromSheets({ 历史报价: rows });
   }
 
   private async enrichedRows(): Promise<HistoryQuotation[]> {
