@@ -1,5 +1,6 @@
 export type TransportType = 'air' | 'sea' | 'none';
 export type QuotationStatus = 'draft' | 'completed';
+export type PurchaseCurrency = 'CNY' | 'USD' | 'MXN';
 
 export interface Product {
   id: string;
@@ -102,14 +103,13 @@ export interface QuotationItem {
   productName: string;
   brand?: string;
   purchaseQty: number;
-  purchasePriceCny: number;
-  totalTaxIncludedCny: number;
-  totalExclTaxCny: number;
-  vatInputCny: number;
+  purchaseCurrency: PurchaseCurrency;
+  purchaseUnitPrice: number;
+  purchaseTotalOriginal: number;
+  purchaseTotalUsd: number;
   transportType: TransportType;
   isCustomsClearance: boolean;
-  firstMileFreightCny: number;
-  cifCny: number;
+  firstMileFreightUsd: number;
   cifUsd: number;
   igiTaxRate: number;
   tariffUsd: number;
@@ -136,7 +136,9 @@ export interface CreateQuotationItemDto {
   productCode?: string;
   productName?: string;
   purchaseQty: number;
-  purchasePriceCny: number;
+  purchaseCurrency?: PurchaseCurrency;
+  purchaseUnitPrice?: number;
+  purchasePriceCny?: number;
   purchasePriceExclTaxCny?: number;
   transportType: TransportType;
   isCustomsClearance: boolean;
@@ -324,6 +326,7 @@ export interface SettlementInvoice {
   currency: SettlementCurrency;
   exchangeRate: number;
   usdAmount: number;
+  isPaid: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -340,6 +343,7 @@ export interface CreateSettlementInvoiceDto {
   invoiceTaxAmount: number;
   currency: SettlementCurrency;
   exchangeRate: number;
+  isPaid?: boolean;
 }
 
 export interface SettlementAttachment {

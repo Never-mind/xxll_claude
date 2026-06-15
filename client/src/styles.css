@@ -317,6 +317,122 @@ th.actions {
   width: 12px;
 }
 
+.toolbar-field {
+  align-items: center;
+  color: var(--color-muted);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.toolbar-field input {
+  min-width: 150px;
+  width: 150px;
+}
+
+.invoice-table-wrap table {
+  table-layout: auto;
+}
+
+.invoice-type-col {
+  min-width: 72px;
+  width: 72px;
+}
+
+.invoice-type-col select {
+  min-width: 64px;
+  width: 64px;
+}
+
+.invoice-paid-col {
+  min-width: 104px;
+  width: 104px;
+}
+
+.invoice-actions-col {
+  min-width: 136px;
+  width: 136px;
+}
+
+.attachment-actions-col {
+  min-width: 132px;
+  width: 132px;
+}
+
+.attachment-actions-col.row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-actions-col.row-actions > * {
+  margin-left: 0;
+}
+
+.paid-switch {
+  background: #e5e7eb;
+  border: 0;
+  border-radius: 999px;
+  color: #4b5563;
+  display: inline-flex;
+  justify-content: flex-start;
+  min-height: 28px;
+  min-width: 88px;
+  padding: 2px;
+  position: relative;
+  width: 88px;
+}
+
+.paid-switch:hover {
+  border-color: transparent;
+  color: #4b5563;
+}
+
+.paid-switch.is-on {
+  background: #16a34a;
+  color: #fff;
+}
+
+.paid-switch:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.paid-switch-knob {
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  height: 24px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 0.18s ease;
+  width: 24px;
+}
+
+.paid-switch.is-on .paid-switch-knob {
+  transform: translateX(60px);
+}
+
+.paid-switch-label {
+  align-items: center;
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  margin-left: 26px;
+  transition: margin 0.18s ease;
+  width: 58px;
+}
+
+.paid-switch.is-on .paid-switch-label {
+  margin-left: 0;
+}
+
 .action-toolbar {
   justify-content: flex-end;
 }
@@ -591,10 +707,13 @@ th, td {
   width: 96px;
 }
 
-.quotation-col-purchasePriceCny,
-.quotation-col-purchasePriceExclTaxCny,
-.quotation-col-totalTaxIncludedCny,
-.quotation-col-totalExclTaxCny,
+.quotation-col-purchaseCurrency {
+  width: 88px;
+}
+
+.quotation-col-purchaseUnitPrice,
+.quotation-col-purchaseTotalOriginal,
+.quotation-col-purchaseTotalUsd,
 .quotation-col-firstMileFreightUsd,
 .quotation-col-cifUsd,
 .quotation-col-tariffUsd,

@@ -47,6 +47,12 @@ export class QuotationController {
     return this.quotations.itemsForEdit(id);
   }
 
+  @Post(':id/confirm')
+  @UseGuards(WriteAuthGuard)
+  confirm(@Param('id') id: string) {
+    return this.quotations.confirm(id);
+  }
+
   @Get(':id/export')
   async export(@Param('id') id: string, @Res() response: Response) {
     response.setHeader('Content-Disposition', `attachment; filename=quotation-${id}.xlsx`);

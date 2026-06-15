@@ -41,7 +41,8 @@ export class QuotationService {
   async detail(id: string): Promise<QuotationDetail> {
     const quotation = (await this.storage.query<Quotation>(QUOTATION_FILE, { id })).at(0);
     if (!quotation) throw new Error(`Quotation ${id} not found`);
-    const items = await this.storage.query<QuotationItem>(ITEM_FILE, { quotationId: id });
+    const items = (await this.storage.query<QuotationItem>(ITEM_FILE, { quotationId: id }))
+      .map((item) => normalizeQuotationItemForDisplay(item, quotation));
     return { quotation, items: await this.withHistoricalDdpQuotes(quotation, items) };
   }
 
@@ -98,6 +99,15 @@ export class QuotationService {
     return { quotation, items };
   }
 
+  async confirm(id: string): Promise<QuotationDetail> {
+    const existing = await this.detail(id);
+    if (existing.quotation.status === 'completed') return existing;
+    const quotation = await this.storage.update<Quotation>(QUOTATION_FILE, id, { status: 'completed' });
+    await this.syncHistory(quotation, existing.items);
+    await this.settlements.ensureForQuotation(quotation, existing.items);
+    return { quotation, items: existing.items };
+  }
+
   async remove(id: string): Promise<void> {
     for (const item of await this.storage.query<QuotationItem>(ITEM_FILE, { quotationId: id })) {
       await this.storage.delete(ITEM_FILE, item.id);
@@ -109,7 +119,7 @@ export class QuotationService {
     const detail = await this.detail(id);
     return workbookBufferFromSheets({
       报价参数: quotationParamRows(detail.quotation),
-      报价明细: quotationItemRows(detail.items, detail.quotation.exchangeRateUsd),
+      报价明细: quotationItemRows(detail.items),
     });
   }
 
@@ -217,19 +227,19 @@ function quotationParamRows(quotation: Quotation) {
   return fields.map(([key, label]) => ({ 参数名: label, 值: quotation[key] ?? '' }));
 }
 
-function quotationItemRows(items: QuotationItem[], exchangeRateUsd: number) {
+function quotationItemRows(items: QuotationItem[]) {
   return items.map((item) => ({
     产品编码: item.productCode,
     产品名称: item.productName,
     数量: Math.trunc(Number(item.purchaseQty || 0)),
-    '采购单价(CNY)': item.purchasePriceCny,
-    '不含税采购单价(CNY)': safeDivide(item.totalExclTaxCny, item.purchaseQty),
-    '采购总价(CNY)': item.totalTaxIncludedCny,
-    '不含税采购总价(CNY)': item.totalExclTaxCny,
+    币种: item.purchaseCurrency,
+    不含税采购单价: item.purchaseUnitPrice,
+    '不含税采购总价（原币种）': item.purchaseTotalOriginal,
+    '不含税采购总价（USD）': item.purchaseTotalUsd,
     运输方式: item.transportType,
     清关: item.isCustomsClearance ? '是' : '否',
     NOM认证: item.enableNom ? '是' : '否',
-    '头程运费（USD）': safeDivide(item.firstMileFreightCny, exchangeRateUsd),
+    '头程运费（USD）': item.firstMileFreightUsd,
     'CIF(USD)': item.cifUsd,
     '关税税率(%)': item.igiTaxRate,
     '关税金额(USD)': item.tariffUsd,
@@ -245,6 +255,37 @@ function quotationItemRows(items: QuotationItem[], exchangeRateUsd: number) {
     '利润(USD)': item.operatingProfitUsd,
     毛利率: `${Number(item.grossMarginRate || 0).toFixed(2)}%`,
   }));
+}
+
+function normalizeQuotationItemForDisplay(item: QuotationItem, quotation: Quotation): QuotationItem {
+  const legacy = item as QuotationItem & {
+    purchasePriceCny?: number;
+    totalExclTaxCny?: number;
+    firstMileFreightCny?: number;
+  };
+  const purchaseQty = Number(item.purchaseQty || 0);
+  const purchaseCurrency = item.purchaseCurrency || 'CNY';
+  const purchaseUnitPrice = Number(item.purchaseUnitPrice || 0)
+    || safeDivide(Number(legacy.totalExclTaxCny || 0), purchaseQty)
+    || safeDivide(Number(legacy.purchasePriceCny || 0), 1.13);
+  const purchaseTotalOriginal = Number(item.purchaseTotalOriginal || 0) || purchaseQty * purchaseUnitPrice;
+  const purchaseTotalUsd = Number(item.purchaseTotalUsd || 0) || convertPurchaseTotalToUsd(purchaseTotalOriginal, purchaseCurrency, quotation);
+  const firstMileFreightUsd = Number(item.firstMileFreightUsd || 0) || safeDivide(Number(legacy.firstMileFreightCny || 0), quotation.exchangeRateUsd);
+  return {
+    ...item,
+    purchaseCurrency,
+    purchaseUnitPrice,
+    purchaseTotalOriginal,
+    purchaseTotalUsd,
+    firstMileFreightUsd,
+    cifUsd: Number(item.cifUsd || 0) || purchaseTotalUsd + firstMileFreightUsd,
+  };
+}
+
+function convertPurchaseTotalToUsd(value: number, currency: string, quotation: Pick<Quotation, 'exchangeRateUsd' | 'exchangeRateMxn'>) {
+  if (currency === 'USD') return value;
+  if (currency === 'MXN') return value * Number(quotation.exchangeRateMxn || 0);
+  return safeDivide(value, quotation.exchangeRateUsd);
 }
 
 function safeDivide(value: number, divisor: number) {

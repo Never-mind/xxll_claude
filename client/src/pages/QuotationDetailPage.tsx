@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { apiGet, download } from '../api.js';
+import { apiGet, apiWrite, download } from '../api.js';
+import FeedbackDialog from '../components/FeedbackDialog.js';
 import FieldVisibilityDialog from '../components/FieldVisibilityDialog.js';
 import type { QuotationDetail } from '../api.js';
 
@@ -8,10 +9,10 @@ const itemColumns = [
   ['productCode', '产品编码'],
   ['productName', '产品名称'],
   ['purchaseQty', '数量'],
-  ['purchasePriceCny', '采购单价(CNY)'],
-  ['purchasePriceExclTaxCny', '不含税采购单价(CNY)'],
-  ['totalTaxIncludedCny', '采购总价(CNY)'],
-  ['totalExclTaxCny', '不含税采购总价(CNY)'],
+  ['purchaseCurrency', '币种'],
+  ['purchaseUnitPrice', '不含税采购单价'],
+  ['purchaseTotalOriginal', '不含税采购总价（原币种）'],
+  ['purchaseTotalUsd', '不含税采购总价（USD）'],
   ['transportType', '运输方式'],
   ['isCustomsClearance', '清关'],
   ['enableNom', 'NOM认证'],
@@ -58,10 +59,27 @@ export default function QuotationDetailPage() {
   const [detail, setDetail] = useState<QuotationDetail | null>(null);
   const [visibleItemColumns, setVisibleItemColumns] = useState<string[]>(() => itemColumns.map(([key]) => key));
   const [showItemColumns, setShowItemColumns] = useState(false);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (id) apiGet<QuotationDetail>(`/quotations/${id}`).then(setDetail);
+    if (id) loadDetail().catch((error) => setMessage(error.message));
   }, [id]);
+
+  async function loadDetail() {
+    if (!id) return;
+    setDetail(await apiGet<QuotationDetail>(`/quotations/${id}`));
+  }
+
+  async function confirmQuotation() {
+    if (!id) return;
+    if (!window.confirm('确认将该报价单状态改为已完成吗？')) return;
+    try {
+      setDetail(await apiWrite<QuotationDetail>(`/quotations/${id}/confirm`, 'POST'));
+      setMessage('报价单已确认');
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  }
 
   if (!detail) return <div className="panel">加载中...</div>;
   const { quotation, items } = detail;
@@ -76,11 +94,13 @@ export default function QuotationDetailPage() {
           <p>{quotation.customerName || '未填写客户'} · {quotation.status}</p>
         </div>
         <div className="toolbar">
+          {quotation.status === 'draft' && <button type="button" onClick={confirmQuotation}>确认报价单</button>}
           <Link className="button-link primary" to={`/quotation/generate/${quotation.id}`}>修改报价</Link>
           <button onClick={() => download(`/quotations/${quotation.id}/export`)}>导出</button>
           <button onClick={() => download(`/quotations/${quotation.id}/export-formal`)}>导出报价单</button>
         </div>
       </header>
+      <FeedbackDialog message={message} onClose={() => setMessage('')} />
       <div className="metrics">
         <Metric label="总数量" value={totalQty} integerValue />
         <Metric label="公共费用合计(USD)" value={quotation.publicFeeTotal} />
@@ -114,7 +134,7 @@ export default function QuotationDetailPage() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  {visibleColumns.map(([key]) => <td key={key}>{formatItemValue(item, key, quotation.exchangeRateUsd)}</td>)}
+                  {visibleColumns.map(([key]) => <td key={key}>{formatItemValue(item, key)}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -123,7 +143,7 @@ export default function QuotationDetailPage() {
                 <tr>
                   {visibleColumns.map(([key]) => (
                     <td key={key} className={isSummableItemColumn(key) ? 'numeric-cell' : undefined}>
-                      {itemColumnTotal(key, items, quotation.exchangeRateUsd)}
+                      {itemColumnTotal(key, items)}
                     </td>
                   ))}
                 </tr>
@@ -157,10 +177,8 @@ function format(value: unknown) {
   return typeof value === 'number' ? value.toFixed(2) : String(value ?? '');
 }
 
-function formatItemValue(item: QuotationDetail['items'][number], key: string, exchangeRateUsd: number) {
+function formatItemValue(item: QuotationDetail['items'][number], key: string) {
   if (key === 'purchaseQty') return integer(item.purchaseQty);
-  if (key === 'purchasePriceExclTaxCny') return format(safeDivide(item.totalExclTaxCny, item.purchaseQty));
-  if (key === 'firstMileFreightUsd') return format(safeDivide(item.firstMileFreightCny, exchangeRateUsd));
   if (key === 'ddpQuoteUnitUsd') return format(safeDivide(item.revenueUsd, item.purchaseQty));
   if (key === 'historicalDdpQuoteUsd') return item.historicalDdpQuoteUsd == null ? '无历史报价' : format(item.historicalDdpQuoteUsd);
   if (key === 'isCustomsClearance' || key === 'enableNom') return item[key] ? '是' : '否';
@@ -168,11 +186,9 @@ function formatItemValue(item: QuotationDetail['items'][number], key: string, ex
   return format(item[key as keyof typeof item]);
 }
 
-function itemColumnTotal(key: string, items: QuotationDetail['items'], exchangeRateUsd: number) {
+function itemColumnTotal(key: string, items: QuotationDetail['items']) {
   if (key === 'productCode') return '合计';
   if (key === 'purchaseQty') return integer(items.reduce((sum, item) => sum + Number(item.purchaseQty || 0), 0));
-  if (key === 'purchasePriceExclTaxCny') return format(items.reduce((sum, item) => sum + safeDivide(item.totalExclTaxCny, item.purchaseQty), 0));
-  if (key === 'firstMileFreightUsd') return format(items.reduce((sum, item) => sum + safeDivide(item.firstMileFreightCny, exchangeRateUsd), 0));
   if (!isSummableItemColumn(key)) return '';
   return format(items.reduce((sum, item) => sum + Number(item[key as keyof typeof item] || 0), 0));
 }
@@ -180,10 +196,9 @@ function itemColumnTotal(key: string, items: QuotationDetail['items'], exchangeR
 function isSummableItemColumn(key: string) {
   return [
     'purchaseQty',
-    'purchasePriceCny',
-    'purchasePriceExclTaxCny',
-    'totalTaxIncludedCny',
-    'totalExclTaxCny',
+    'purchaseUnitPrice',
+    'purchaseTotalOriginal',
+    'purchaseTotalUsd',
     'firstMileFreightUsd',
     'cifUsd',
     'tariffUsd',

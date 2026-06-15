@@ -65,7 +65,13 @@ export class TariffRateService {
     let imported = 0;
     for (const [index, row] of rows.entries()) {
       try {
-        await this.create(row as TariffInput);
+        const input = row as TariffInput;
+        const exists = await this.byDeviceType(input.deviceType || '');
+        if (exists) {
+          await this.update(exists.id, input);
+        } else {
+          await this.create(input);
+        }
         imported += 1;
       } catch (error) {
         errors.push(`Row ${index + 2}: ${(error as Error).message}`);

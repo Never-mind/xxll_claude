@@ -3,7 +3,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { WriteAuthGuard } from '../../common/write-auth.guard.js';
 import type {
-  CreateSettlementAttachmentDto,
   CreateSettlementExpenseDto,
   CreateSettlementInvoiceDto,
   CreateSettlementSaleDto,
@@ -126,12 +125,18 @@ export class SettlementProjectController {
     if (!file) throw new Error('Attachment file is required');
     const dataUrl = `data:${file.mimetype || 'application/octet-stream'};base64,${file.buffer.toString('base64')}`;
     return this.settlements.addAttachment(id, {
-      fileName: file.originalname,
+      fileName: normalizeUploadedFileName(file.originalname),
       fileType: file.mimetype || '',
       fileSize: file.size,
       dataUrl,
       description,
     });
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  @UseGuards(WriteAuthGuard)
+  deleteAttachment(@Param('id') id: string, @Param('attachmentId') attachmentId: string) {
+    return this.settlements.deleteAttachment(id, attachmentId);
   }
 
   @Post(':id/complete')
@@ -145,4 +150,11 @@ export class SettlementProjectController {
   remove(@Param('id') id: string) {
     return this.settlements.remove(id);
   }
+}
+
+export function normalizeUploadedFileName(fileName: string): string {
+  if (!fileName || !/[\u0080-\u00ff]/.test(fileName)) return fileName;
+  const decoded = Buffer.from(fileName, 'latin1').toString('utf8');
+  if (decoded.includes('\uFFFD')) return fileName;
+  return /[\u4e00-\u9fff]/.test(decoded) ? decoded : fileName;
 }

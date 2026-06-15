@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiGet } from '../api.js';
+import { apiGet, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
 import type { FinanceInvoicePage, FinanceInvoiceRow, SettlementInvoiceType } from '../api.js';
 
@@ -8,6 +8,8 @@ export default function FinanceInvoicePage() {
   const [rows, setRows] = useState<FinanceInvoiceRow[]>([]);
   const [keyword, setKeyword] = useState('');
   const [type, setType] = useState('');
+  const [accountPeriodStart, setAccountPeriodStart] = useState('');
+  const [accountPeriodEnd, setAccountPeriodEnd] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
@@ -21,8 +23,9 @@ export default function FinanceInvoicePage() {
   }, { income: 0, cost: 0, net: 0 }), [rows]);
 
   async function load(nextPage = page, nextPageSize = pageSize) {
+    const query = invoiceQuery(nextPage, nextPageSize, keyword, type, accountPeriodStart, accountPeriodEnd);
     const result = await apiGet<FinanceInvoicePage>(
-      `/finance/invoices?keyword=${encodeURIComponent(keyword)}&type=${encodeURIComponent(type)}&page=${nextPage}&pageSize=${nextPageSize}`,
+      `/finance/invoices?${query}`,
     );
     setRows(result.items);
     setTotal(result.total);
@@ -32,7 +35,7 @@ export default function FinanceInvoicePage() {
 
   useEffect(() => {
     load().catch((err) => setError(err.message));
-  }, [page, pageSize, type]);
+  }, [page, pageSize, type, accountPeriodStart, accountPeriodEnd]);
 
   return (
     <section>
@@ -64,6 +67,21 @@ export default function FinanceInvoicePage() {
           <option value="income">收入</option>
           <option value="cost">成本</option>
         </select>
+        <label className="toolbar-field">
+          <span>账期开始</span>
+          <input type="date" value={accountPeriodStart} onChange={(event) => {
+            setAccountPeriodStart(event.target.value);
+            setPage(1);
+          }} />
+        </label>
+        <label className="toolbar-field">
+          <span>账期结束</span>
+          <input type="date" value={accountPeriodEnd} onChange={(event) => {
+            setAccountPeriodEnd(event.target.value);
+            setPage(1);
+          }} />
+        </label>
+        <button type="button" onClick={() => download(`/finance/invoices/export?${invoiceExportQuery(keyword, type, accountPeriodStart, accountPeriodEnd)}`)}>导出</button>
       </div>
       <div className="table-wrap">
         <table>
@@ -85,6 +103,7 @@ export default function FinanceInvoicePage() {
               <th>发票币种</th>
               <th>发票汇率</th>
               <th>美金金额</th>
+              <th>是否支付</th>
               <th className="actions">操作</th>
             </tr>
           </thead>
@@ -107,6 +126,7 @@ export default function FinanceInvoicePage() {
                 <td>{row.currency}</td>
                 <td className="numeric-cell">{money(row.exchangeRate)}</td>
                 <td className="numeric-cell">{money(row.usdAmount)}</td>
+                <td>{row.isPaid ? '是' : '否'}</td>
                 <td className="actions">
                   <Link to={`/settlement-projects/${row.projectId}`}>查看项目</Link>
                 </td>
@@ -114,7 +134,7 @@ export default function FinanceInvoicePage() {
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={17} className="empty-cell">暂无发票明细</td>
+                <td colSpan={18} className="empty-cell">暂无发票明细</td>
               </tr>
             )}
           </tbody>
@@ -153,6 +173,28 @@ function invoiceTypeLabel(type: SettlementInvoiceType) {
 
 function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString() : '-';
+}
+
+function invoiceQuery(page: number, pageSize: number, keyword: string, type: string, accountPeriodStart: string, accountPeriodEnd: string) {
+  const params = new URLSearchParams({
+    keyword,
+    type,
+    page: String(page),
+    pageSize: String(pageSize),
+    accountPeriodStart,
+    accountPeriodEnd,
+  });
+  return params.toString();
+}
+
+function invoiceExportQuery(keyword: string, type: string, accountPeriodStart: string, accountPeriodEnd: string) {
+  const params = new URLSearchParams({
+    keyword,
+    type,
+    accountPeriodStart,
+    accountPeriodEnd,
+  });
+  return params.toString();
 }
 
 function money(value = 0) {

@@ -3,13 +3,17 @@ import { workbookBufferFromSheets } from '../../common/excel-utils.js';
 import { DatabaseStorageService } from '../../common/database-storage.service.js';
 import { read, utils } from 'xlsx';
 import type { PageResult, Product } from '../../../shared/api.interface.js';
+import { TariffRateService } from '../tariff-rate/tariff-rate.service.js';
 
 type ProductInput = Omit<Product, 'id' | 'createdAt' | 'updatedAt'>;
 const FILE = 'products.xlsx';
 
 @Injectable()
 export class ProductService {
-  constructor(@Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService) {}
+  constructor(
+    @Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService,
+    @Inject(TariffRateService) private readonly tariffs: TariffRateService,
+  ) {}
 
   async list(keyword = '', page = 1, pageSize = 10): Promise<PageResult<Product>> {
     const all = await this.storage.readTable<Product>(FILE);
@@ -44,11 +48,11 @@ export class ProductService {
   async create(input: ProductInput): Promise<Product> {
     const exists = await this.findByCode(input.productCode);
     if (exists) throw new Error(`Product code ${input.productCode} already exists`);
-    return this.storage.insert<Product>(FILE, this.normalize(input));
+    return this.storage.insert<Product>(FILE, await this.normalizeWithTariff(input));
   }
 
   async update(id: string, input: Partial<ProductInput>): Promise<Product> {
-    return this.storage.update<Product>(FILE, id, this.normalize(input));
+    return this.storage.update<Product>(FILE, id, await this.normalizeWithTariff(input));
   }
 
   async remove(id: string): Promise<void> {
@@ -110,6 +114,14 @@ export class ProductService {
       isElectric: Boolean(input.isElectric),
       needNom: Boolean(input.needNom),
     };
+  }
+
+  private async normalizeWithTariff<T extends Partial<ProductInput>>(input: T): Promise<T> {
+    const normalized = this.normalize(input);
+    const category = text(normalized.category);
+    if (!category) return { ...normalized, hsCodeMx: '' };
+    const tariff = await this.tariffs.byDeviceType(category);
+    return { ...normalized, hsCodeMx: tariff?.hsCode || '' };
   }
 }
 

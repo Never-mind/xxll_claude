@@ -280,6 +280,12 @@ export class SettlementProjectService {
     return this.detail(projectId);
   }
 
+  async deleteAttachment(projectId: string, attachmentId: string): Promise<SettlementProjectDetail> {
+    await this.assertProjectRecord(ATTACHMENT_FILE, attachmentId, projectId, 'Settlement attachment');
+    await this.storage.delete(ATTACHMENT_FILE, attachmentId);
+    return this.detail(projectId);
+  }
+
   async complete(projectId: string): Promise<SettlementProjectDetail> {
     await this.storage.update<SettlementProject>(PROJECT_FILE, projectId, { status: 'completed' });
     return this.detail(projectId);
@@ -370,9 +376,9 @@ export class SettlementProjectService {
       brand: item.brand || '',
       plannedQty: item.purchaseQty,
       purchaseQty: item.purchaseQty,
-      purchaseUnitPrice: item.purchasePriceCny,
-      currency: 'CNY',
-      priceType: 'tax_included',
+      purchaseUnitPrice: item.purchaseUnitPrice,
+      currency: item.purchaseCurrency || 'CNY',
+      priceType: 'tax_excluded',
       taxRate: 13,
       quotedWarehouseCostUsd: item.ddpTotalUsd,
       quotedSalesRevenueUsd: item.revenueUsd,
@@ -384,27 +390,7 @@ export class SettlementProjectService {
   }
 
   private invoicePatch(projectId: string, dto: CreateSettlementInvoiceDto): Omit<SettlementInvoice, 'id' | 'createdAt' | 'updatedAt'> {
-    const invoiceTotal = Number(dto.invoiceTotal || 0);
-    const taxRate = Number(dto.taxRate || 0);
-    const exchangeRate = Number(dto.exchangeRate || 0);
-    const invoiceTaxExcludedTotal = taxRate === -100 ? 0 : safeDivide(invoiceTotal, 1 + taxRate / 100);
-    const invoiceTaxAmount = invoiceTaxExcludedTotal * (taxRate / 100);
-    const unsignedUsdAmount = exchangeRate ? safeDivide(invoiceTaxExcludedTotal, exchangeRate) : 0;
-    return {
-      projectId,
-      type: dto.type,
-      accountPeriod: dto.accountPeriod || '',
-      invoiceEntity: dto.invoiceEntity || '',
-      invoiceDate: dto.invoiceDate || '',
-      invoiceNo: dto.invoiceNo || '',
-      invoiceTotal,
-      invoiceTaxExcludedTotal: round(invoiceTaxExcludedTotal),
-      taxRate,
-      invoiceTaxAmount: round(invoiceTaxAmount),
-      currency: dto.currency,
-      exchangeRate,
-      usdAmount: round(dto.type === 'cost' ? -Math.abs(unsignedUsdAmount) : Math.abs(unsignedUsdAmount)),
-    };
+    return __testOnlyInvoicePatch(projectId, dto);
   }
 
   private async recalculate(projectId: string): Promise<SettlementProject> {
@@ -536,6 +522,7 @@ function settlementInvoiceRow(invoice: SettlementInvoice) {
     发票币种: invoice.currency,
     发票汇率: invoice.exchangeRate,
     美金金额: invoice.usdAmount,
+    是否支付: invoice.isPaid ? '是' : '否',
   };
 }
 
@@ -576,6 +563,31 @@ function expenseLabel(type: string) {
 
 function sum<T>(items: T[], pick: (item: T) => number): number {
   return round(items.reduce((total, item) => total + Number(pick(item) || 0), 0));
+}
+
+export function __testOnlyInvoicePatch(projectId: string, dto: CreateSettlementInvoiceDto): Omit<SettlementInvoice, 'id' | 'createdAt' | 'updatedAt'> {
+  const invoiceTotal = Number(dto.invoiceTotal || 0);
+  const taxRate = Number(dto.taxRate || 0);
+  const exchangeRate = Number(dto.exchangeRate || 0);
+  const invoiceTaxExcludedTotal = taxRate === -100 ? 0 : safeDivide(invoiceTotal, 1 + taxRate / 100);
+  const invoiceTaxAmount = invoiceTaxExcludedTotal * (taxRate / 100);
+  const unsignedUsdAmount = exchangeRate ? safeDivide(invoiceTaxExcludedTotal, exchangeRate) : 0;
+  return {
+    projectId,
+    type: dto.type,
+    accountPeriod: dto.accountPeriod || '',
+    invoiceEntity: dto.invoiceEntity || '',
+    invoiceDate: dto.invoiceDate || '',
+    invoiceNo: dto.invoiceNo || '',
+    invoiceTotal,
+    invoiceTaxExcludedTotal: round(invoiceTaxExcludedTotal),
+    taxRate,
+    invoiceTaxAmount: round(invoiceTaxAmount),
+    currency: dto.currency,
+    exchangeRate,
+    usdAmount: round(dto.type === 'cost' ? -Math.abs(unsignedUsdAmount) : Math.abs(unsignedUsdAmount)),
+    isPaid: Boolean(dto.isPaid),
+  };
 }
 
 function safeDivide(value: number, divisor: number): number {

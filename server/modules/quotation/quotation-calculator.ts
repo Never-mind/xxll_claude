@@ -26,15 +26,12 @@ export function calculateQuotation(
     if (!product) throw new Error(`Product ${item.productId} not found`);
     const tariff = tariffs.find((candidate) => candidate.hsCode === product.hsCodeMx);
     const purchaseQty = Number(item.purchaseQty);
-    const purchasePriceExclTaxCny = item.purchasePriceExclTaxCny === undefined
-      ? safeDivide(Number(item.purchasePriceCny), 1.13)
-      : Number(item.purchasePriceExclTaxCny);
-    const purchasePriceCny = item.purchasePriceCny === undefined
-      ? purchasePriceExclTaxCny * 1.13
-      : Number(item.purchasePriceCny);
-    const totalTaxIncludedCny = purchaseQty * purchasePriceCny;
-    const totalExclTaxCny = purchaseQty * purchasePriceExclTaxCny;
-    const vatInputCny = totalTaxIncludedCny - totalExclTaxCny;
+    const purchaseCurrency = item.purchaseCurrency || 'CNY';
+    const purchaseUnitPrice = normalizeOptionalNumber(item.purchaseUnitPrice)
+      ?? normalizeOptionalNumber(item.purchasePriceExclTaxCny)
+      ?? safeDivide(Number(item.purchasePriceCny || 0), 1.13);
+    const purchaseTotalOriginal = purchaseQty * purchaseUnitPrice;
+    const purchaseTotalUsd = convertPurchaseTotalToUsd(purchaseTotalOriginal, purchaseCurrency, dto);
     const length = Number(product.length || 0);
     const width = Number(product.width || 0);
     const height = Number(product.height || 0);
@@ -46,8 +43,8 @@ export function calculateQuotation(
         : item.transportType === 'sea'
           ? length * width * height / 1000000 * dto.seaFreightRate * purchaseQty
           : 0;
-    const cifCny = totalExclTaxCny + firstMileFreightCny;
-    const cifUsd = safeDivide(cifCny, dto.exchangeRateUsd);
+    const firstMileFreightUsd = safeDivide(firstMileFreightCny, dto.exchangeRateUsd);
+    const cifUsd = purchaseTotalUsd + firstMileFreightUsd;
     const igiTaxRate = item.isCustomsClearance ? Number(tariff?.taxRate ?? 0) : 0;
     const tariffUsd = cifUsd * igiTaxRate / 100;
     const capitalCostUsd = cifUsd * dto.capitalCostRate / 100 * dto.accountPeriod / 12;
@@ -72,14 +69,13 @@ export function calculateQuotation(
       productName: product.name,
       brand: product.brand || '',
       purchaseQty,
-      purchasePriceCny,
-      totalTaxIncludedCny,
-      totalExclTaxCny,
-      vatInputCny,
+      purchaseCurrency,
+      purchaseUnitPrice,
+      purchaseTotalOriginal,
+      purchaseTotalUsd,
       transportType: item.transportType,
       isCustomsClearance: item.isCustomsClearance,
-      firstMileFreightCny,
-      cifCny,
+      firstMileFreightUsd,
       cifUsd,
       igiTaxRate,
       tariffUsd,
@@ -145,6 +141,12 @@ function normalizeOptionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   const parsed = Number(value);
   return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function convertPurchaseTotalToUsd(value: number, currency: string, dto: Pick<CreateQuotationDto, 'exchangeRateUsd' | 'exchangeRateMxn'>): number {
+  if (currency === 'USD') return value;
+  if (currency === 'MXN') return value * Number(dto.exchangeRateMxn || 0);
+  return safeDivide(value, dto.exchangeRateUsd);
 }
 
 function roundObject<T extends Record<string, unknown>>(input: T): T {

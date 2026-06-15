@@ -4,7 +4,6 @@ import { apiGet, apiWrite, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
 import { calculateSettlementPurchaseAmounts } from './settlement-purchase-amount.js';
 import type {
-  CreateSettlementAttachmentDto,
   CreateSettlementExpenseDto,
   CreateSettlementInvoiceDto,
   CreateSettlementSaleDto,
@@ -52,6 +51,7 @@ export default function SettlementProjectDetailPage() {
   const [editingPurchasedIds, setEditingPurchasedIds] = useState<string[]>([]);
   const [editingExpenseIds, setEditingExpenseIds] = useState<string[]>([]);
   const [editingSaleIds, setEditingSaleIds] = useState<string[]>([]);
+  const [editingInvoiceIds, setEditingInvoiceIds] = useState<string[]>([]);
   const [expenseDraft, setExpenseDraft] = useState<CreateSettlementExpenseDto>({
     type: 'first_mile_freight',
     description: '',
@@ -82,6 +82,7 @@ export default function SettlementProjectDetailPage() {
     invoiceTaxAmount: 0,
     currency: 'CNY',
     exchangeRate: 1,
+    isPaid: false,
   });
   const [attachmentDescription, setAttachmentDescription] = useState('');
   const [error, setError] = useState('');
@@ -98,6 +99,7 @@ export default function SettlementProjectDetailPage() {
     setEditingPurchasedIds([]);
     setEditingExpenseIds([]);
     setEditingSaleIds([]);
+    setEditingInvoiceIds([]);
   }
 
   useEffect(() => {
@@ -157,6 +159,7 @@ export default function SettlementProjectDetailPage() {
       invoiceTaxExcludedTotal: 0,
       taxRate: 0,
       invoiceTaxAmount: 0,
+      isPaid: false,
     });
   }
 
@@ -180,6 +183,12 @@ export default function SettlementProjectDetailPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '附件上传失败');
     }
+  }
+
+  async function deleteAttachment(attachmentId: string) {
+    if (!id) return;
+    const result = await apiWrite<SettlementProjectDetail>(`/settlement-projects/${id}/attachments/${attachmentId}`, 'DELETE');
+    applyDetail(result);
   }
 
   async function completeProject() {
@@ -212,6 +221,10 @@ export default function SettlementProjectDetailPage() {
 
   function toggleEditingSale(saleId: string, editing: boolean) {
     setEditingSaleIds((current) => editing ? Array.from(new Set([...current, saleId])) : current.filter((id) => id !== saleId));
+  }
+
+  function toggleEditingInvoice(invoiceId: string, editing: boolean) {
+    setEditingInvoiceIds((current) => editing ? Array.from(new Set([...current, invoiceId])) : current.filter((id) => id !== invoiceId));
   }
 
   function updatePurchasedDraft(itemId: string, patch: Partial<UpdateSettlementItemDto>) {
@@ -272,6 +285,17 @@ export default function SettlementProjectDetailPage() {
   async function saveInvoice(invoiceId: string) {
     if (!id) return;
     const result = await apiWrite<SettlementProjectDetail>(`/settlement-projects/${id}/invoices/${invoiceId}`, 'PUT', normalizeInvoiceDraft(invoiceDrafts[invoiceId]));
+    applyDetail(result);
+    toggleEditingInvoice(invoiceId, false);
+  }
+
+  async function toggleInvoicePaid(invoiceId: string, isPaid: boolean) {
+    if (!id) return;
+    const result = await apiWrite<SettlementProjectDetail>(
+      `/settlement-projects/${id}/invoices/${invoiceId}`,
+      'PUT',
+      normalizeInvoiceDraft({ ...invoiceDrafts[invoiceId], isPaid }),
+    );
     applyDetail(result);
   }
 
@@ -775,10 +799,13 @@ export default function SettlementProjectDetailPage() {
           detail={detail}
           draft={invoiceDraft}
           drafts={invoiceDrafts}
+          editingIds={editingInvoiceIds}
           onDraftChange={setInvoiceDraft}
           onRowDraftChange={updateInvoiceDraft}
           onSave={addInvoice}
+          onRowEdit={(invoiceId) => toggleEditingInvoice(invoiceId, true)}
           onRowSave={saveInvoice}
+          onPaidToggle={toggleInvoicePaid}
           onRowDelete={deleteInvoice}
         />
       )}
@@ -788,6 +815,7 @@ export default function SettlementProjectDetailPage() {
           description={attachmentDescription}
           onDescriptionChange={setAttachmentDescription}
           onUpload={uploadAttachment}
+          onDelete={deleteAttachment}
         />
       )}
     </section>
@@ -798,19 +826,25 @@ function InvoiceManagement({
   detail,
   draft,
   drafts,
+  editingIds,
   onDraftChange,
   onRowDraftChange,
   onSave,
+  onRowEdit,
   onRowSave,
+  onPaidToggle,
   onRowDelete,
 }: {
   detail: SettlementProjectDetail;
   draft: CreateSettlementInvoiceDto;
   drafts: Record<string, UpdateSettlementInvoiceDto>;
+  editingIds: string[];
   onDraftChange: (draft: CreateSettlementInvoiceDto) => void;
   onRowDraftChange: (invoiceId: string, patch: Partial<UpdateSettlementInvoiceDto>) => void;
   onSave: () => void;
+  onRowEdit: (invoiceId: string) => void;
   onRowSave: (invoiceId: string) => void;
+  onPaidToggle: (invoiceId: string, isPaid: boolean) => void;
   onRowDelete: (invoiceId: string) => void;
 }) {
   const calculated = calculateInvoiceAmounts(draft);
@@ -818,7 +852,7 @@ function InvoiceManagement({
     <div className="panel">
       <div className="section-heading">
         <h2>发票管理</h2>
-        <button className="primary-action" type="button" onClick={onSave}>保存发票</button>
+        <button className="primary-action" type="button" onClick={onSave}>新增发票</button>
       </div>
       <div className="inline-form-grid">
         <label>
@@ -830,7 +864,7 @@ function InvoiceManagement({
         </label>
         <label>
           <span>账期</span>
-          <input value={draft.accountPeriod || ''} onChange={(event) => onDraftChange({ ...draft, accountPeriod: event.target.value })} />
+          <input type="date" value={draft.accountPeriod || ''} onChange={(event) => onDraftChange({ ...draft, accountPeriod: event.target.value })} />
         </label>
         <label>
           <span>发票主体</span>
@@ -874,12 +908,16 @@ function InvoiceManagement({
           <span>美金金额</span>
           <input value={money(calculated.usdAmount)} readOnly />
         </label>
+        <label>
+          <span>是否支付</span>
+          <PaidSwitch checked={Boolean(draft.isPaid)} onChange={(checked) => onDraftChange({ ...draft, isPaid: checked })} />
+        </label>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap invoice-table-wrap">
         <table>
           <thead>
             <tr>
-              <th>类型</th>
+              <th className="invoice-type-col">类型</th>
               <th>账期</th>
               <th>发票主体</th>
               <th>发票日期</th>
@@ -891,38 +929,53 @@ function InvoiceManagement({
               <th>发票币种</th>
               <th>发票汇率</th>
               <th>美金金额</th>
-              <th>操作</th>
+              <th className="invoice-paid-col">是否支付</th>
+              <th className="invoice-actions-col">操作</th>
             </tr>
           </thead>
           <tbody>
             {detail.invoices.map((invoice) => {
+              const isEditing = editingIds.includes(invoice.id);
               const rowDraft = drafts[invoice.id] || settlementInvoiceDraft(invoice);
               const rowCalculated = calculateInvoiceAmounts(rowDraft);
               return (
                 <tr key={invoice.id}>
-                  <td>
+                  <td className="invoice-type-col">{isEditing ? (
                     <select value={rowDraft.type} onChange={(event) => onRowDraftChange(invoice.id, { type: event.target.value as SettlementInvoiceType })}>
                       <option value="income">收入</option>
                       <option value="cost">成本</option>
                     </select>
-                  </td>
-                  <td><input value={rowDraft.accountPeriod || ''} onChange={(event) => onRowDraftChange(invoice.id, { accountPeriod: event.target.value })} /></td>
-                  <td><input value={rowDraft.invoiceEntity || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceEntity: event.target.value })} /></td>
-                  <td><input type="date" value={rowDraft.invoiceDate || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceDate: event.target.value })} /></td>
-                  <td><input value={rowDraft.invoiceNo || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceNo: event.target.value })} /></td>
-                  <td><input type="number" step="any" value={numberInputValue(rowDraft.invoiceTotal)} onChange={(event) => onRowDraftChange(invoice.id, { invoiceTotal: parseNumberInput(event.target.value) as number })} /></td>
-                  <td className="numeric-cell">{money(rowCalculated.invoiceTaxExcludedTotal)}</td>
-                  <td><input type="number" step="any" value={numberInputValue(rowDraft.taxRate)} onChange={(event) => onRowDraftChange(invoice.id, { taxRate: parseNumberInput(event.target.value) as number })} /></td>
-                  <td className="numeric-cell">{money(rowCalculated.invoiceTaxAmount)}</td>
-                  <td>
+                  ) : invoiceTypeLabel(invoice.type)}</td>
+                  <td>{isEditing ? <input type="date" value={rowDraft.accountPeriod || ''} onChange={(event) => onRowDraftChange(invoice.id, { accountPeriod: event.target.value })} /> : invoice.accountPeriod || '-'}</td>
+                  <td>{isEditing ? <input value={rowDraft.invoiceEntity || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceEntity: event.target.value })} /> : invoice.invoiceEntity || '-'}</td>
+                  <td>{isEditing ? <input type="date" value={rowDraft.invoiceDate || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceDate: event.target.value })} /> : invoice.invoiceDate || '-'}</td>
+                  <td>{isEditing ? <input value={rowDraft.invoiceNo || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceNo: event.target.value })} /> : invoice.invoiceNo || '-'}</td>
+                  <td>{isEditing ? <input type="number" step="any" value={numberInputValue(rowDraft.invoiceTotal)} onChange={(event) => onRowDraftChange(invoice.id, { invoiceTotal: parseNumberInput(event.target.value) as number })} /> : money(invoice.invoiceTotal)}</td>
+                  <td className="numeric-cell">{money(isEditing ? rowCalculated.invoiceTaxExcludedTotal : invoice.invoiceTaxExcludedTotal)}</td>
+                  <td>{isEditing ? <input type="number" step="any" value={numberInputValue(rowDraft.taxRate)} onChange={(event) => onRowDraftChange(invoice.id, { taxRate: parseNumberInput(event.target.value) as number })} /> : money(invoice.taxRate)}</td>
+                  <td className="numeric-cell">{money(isEditing ? rowCalculated.invoiceTaxAmount : invoice.invoiceTaxAmount)}</td>
+                  <td>{isEditing ? (
                     <select value={rowDraft.currency} onChange={(event) => onRowDraftChange(invoice.id, { currency: event.target.value as SettlementCurrency })}>
                       {currencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
                     </select>
+                  ) : invoice.currency}</td>
+                  <td>{isEditing ? <input type="number" step="any" value={numberInputValue(rowDraft.exchangeRate)} onChange={(event) => onRowDraftChange(invoice.id, { exchangeRate: parseNumberInput(event.target.value) as number })} /> : money(invoice.exchangeRate)}</td>
+                  <td className="numeric-cell">{money(isEditing ? rowCalculated.usdAmount : invoice.usdAmount)}</td>
+                  <td className="invoice-paid-col">
+                    <PaidSwitch
+                      checked={Boolean(isEditing ? rowDraft.isPaid : invoice.isPaid)}
+                      onChange={(checked) => {
+                        onRowDraftChange(invoice.id, { isPaid: checked });
+                        if (!isEditing) onPaidToggle(invoice.id, checked);
+                      }}
+                    />
                   </td>
-                  <td><input type="number" step="any" value={numberInputValue(rowDraft.exchangeRate)} onChange={(event) => onRowDraftChange(invoice.id, { exchangeRate: parseNumberInput(event.target.value) as number })} /></td>
-                  <td className="numeric-cell">{money(rowCalculated.usdAmount)}</td>
-                  <td className="row-actions">
-                    <button type="button" onClick={() => onRowSave(invoice.id)}>保存</button>
+                  <td className="row-actions invoice-actions-col">
+                    {isEditing ? (
+                      <button type="button" onClick={() => onRowSave(invoice.id)}>保存</button>
+                    ) : (
+                      <button type="button" onClick={() => onRowEdit(invoice.id)}>修改</button>
+                    )}
                     <button type="button" onClick={() => onRowDelete(invoice.id)}>删除</button>
                   </td>
                 </tr>
@@ -930,7 +983,7 @@ function InvoiceManagement({
             })}
             {!detail.invoices.length && (
               <tr>
-                <td colSpan={13} className="empty-cell">暂无发票信息</td>
+                <td colSpan={14} className="empty-cell">暂无发票明细</td>
               </tr>
             )}
           </tbody>
@@ -940,16 +993,34 @@ function InvoiceManagement({
   );
 }
 
+function PaidSwitch({ checked, disabled = false, onChange }: { checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      aria-checked={checked}
+      className={`paid-switch ${checked ? 'is-on' : ''}`}
+      disabled={disabled}
+      role="switch"
+      type="button"
+      onClick={() => onChange(!checked)}
+    >
+      <span className="paid-switch-knob" />
+      <span className="paid-switch-label">{checked ? '已支付' : '未支付'}</span>
+    </button>
+  );
+}
+
 function AttachmentManagement({
   detail,
   description,
   onDescriptionChange,
   onUpload,
+  onDelete,
 }: {
   detail: SettlementProjectDetail;
   description: string;
   onDescriptionChange: (value: string) => void;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onDelete: (attachmentId: string) => void;
 }) {
   return (
     <div className="panel">
@@ -975,7 +1046,7 @@ function AttachmentManagement({
               <th>大小</th>
               <th>说明</th>
               <th>上传时间</th>
-              <th>操作</th>
+              <th className="attachment-actions-col">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -986,7 +1057,10 @@ function AttachmentManagement({
                 <td className="numeric-cell">{formatFileSize(attachment.fileSize)}</td>
                 <td>{attachment.description || '-'}</td>
                 <td>{new Date(attachment.uploadedAt).toLocaleString()}</td>
-                <td><a href={attachment.dataUrl} download={attachment.fileName}>下载</a></td>
+                <td className="row-actions attachment-actions-col">
+                  <a href={attachment.dataUrl} download={attachment.fileName}>下载</a>
+                  <button className="danger-action" type="button" onClick={() => onDelete(attachment.id)}>删除</button>
+                </td>
               </tr>
             ))}
             {!detail.attachments.length && (
@@ -1137,6 +1211,7 @@ function settlementInvoiceDraft(invoice: {
   invoiceTaxAmount: number;
   currency: SettlementCurrency;
   exchangeRate: number;
+  isPaid?: boolean;
 }): UpdateSettlementInvoiceDto {
   return {
     type: invoice.type,
@@ -1150,6 +1225,7 @@ function settlementInvoiceDraft(invoice: {
     invoiceTaxAmount: invoice.invoiceTaxAmount,
     currency: invoice.currency,
     exchangeRate: invoice.exchangeRate,
+    isPaid: Boolean(invoice.isPaid),
   };
 }
 
@@ -1179,10 +1255,6 @@ function normalizeInvoiceDraft(draft: CreateSettlementInvoiceDto): CreateSettlem
   };
 }
 
-function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleDateString() : '-';
-}
-
 function formatFileSize(value = 0) {
   const size = Number(value || 0);
   if (size >= 1024 * 1024) return `${money(size / 1024 / 1024)} MB`;
@@ -1197,6 +1269,10 @@ function priceTypeLabel(value: string) {
 function expenseLabel(type: string) {
   const match = expenseTypes.find(([value]) => value === type);
   return match?.[1] || type;
+}
+
+function invoiceTypeLabel(type: SettlementInvoiceType) {
+  return type === 'income' ? '收入' : '成本';
 }
 
 function money(value = 0) {

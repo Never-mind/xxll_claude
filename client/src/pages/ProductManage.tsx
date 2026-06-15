@@ -4,20 +4,21 @@ import type { FieldConfig } from './AdminTable.js';
 import { apiGet } from '../api.js';
 import type { Product, TariffPage, TariffRate } from '../api.js';
 
-const fields: FieldConfig[] = [
+const baseFields: FieldConfig[] = [
   { key: 'imageUrl', label: '图片', type: 'image' },
   { key: 'productCode', label: '产品编码' },
   { key: 'name', label: '产品名称' },
   { key: 'spec', label: '规格' },
   { key: 'brand', label: '品牌' },
-  { key: 'category', label: '品类' },
+  { key: 'category', label: '品类', type: 'select' },
   { key: 'unit', label: '单位' },
   { key: 'length', label: '长(cm)', type: 'number' },
   { key: 'width', label: '宽(cm)', type: 'number' },
   { key: 'height', label: '高(cm)', type: 'number' },
   { key: 'grossWeight', label: '毛重(kg)', type: 'number', step: '0.01' },
   { key: 'hsCodeCn', label: '中国HS编码' },
-  { key: 'hsCodeMx', label: '墨西哥HS编码' },
+  { key: 'hsCodeMx', label: '墨西哥HS编码', readOnly: true },
+  { key: 'mxTaxRate', label: '墨西哥关税(%)', readOnly: true, submit: false },
   { key: 'suggestedPrice', label: '建议进价(CNY)', type: 'number' },
   { key: 'contactName1', label: '联系人姓名1' },
   { key: 'contactPhone1', label: '联系方式1' },
@@ -53,6 +54,10 @@ export default function ProductManage() {
     apiGet<TariffPage>('/tariff-rates?page=1&pageSize=50').then((result) => setTariffs(result.items)).catch(() => setTariffs([]));
   }, []);
 
+  const fields = baseFields.map((field) => field.key === 'category'
+    ? { ...field, options: ['', ...tariffs.map((tariff) => tariff.deviceType)] }
+    : field);
+
   return (
     <AdminTable<Product>
       title="产品信息管理"
@@ -61,6 +66,8 @@ export default function ProductManage() {
       fields={fields}
       columns={columns}
       enableBulkDelete
+      prepareEdit={(draft) => applyTariffByCategory(draft, tariffs)}
+      onFieldChange={(draft, field) => field.key === 'category' ? applyTariffByCategory(draft, tariffs) : draft}
       getCellValue={(row, column) => {
         if (column.key === 'dimensions') return `${number(row.length)}×${number(row.width)}×${number(row.height)}`;
         if (column.key === 'mxTaxRate') {
@@ -73,6 +80,15 @@ export default function ProductManage() {
       }}
     />
   );
+}
+
+function applyTariffByCategory(draft: Partial<Product>, tariffs: TariffRate[]): Partial<Product> {
+  const tariff = tariffs.find((item) => item.deviceType === draft.category);
+  return {
+    ...draft,
+    hsCodeMx: tariff?.hsCode || '',
+    mxTaxRate: tariff ? Number(tariff.taxRate).toFixed(2) : '',
+  } as Partial<Product>;
 }
 
 function number(value: number) {

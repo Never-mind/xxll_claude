@@ -164,6 +164,11 @@ export class DatabaseStorageService {
   private async applySchemaUpdates(): Promise<void> {
     await ensureColumn(this.pool(), 'quotation_items', 'ddpQuoteUnitUsd', 'DECIMAL(14,4) NULL AFTER `ddpUnitPriceUsd`');
     await ensureColumn(this.pool(), 'quotation_items', 'brand', 'VARCHAR(255) NULL AFTER `productName`');
+    await ensureColumn(this.pool(), 'quotation_items', 'purchaseCurrency', "VARCHAR(10) NOT NULL DEFAULT 'CNY' AFTER `purchaseQty`");
+    await ensureColumn(this.pool(), 'quotation_items', 'purchaseUnitPrice', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `purchaseCurrency`');
+    await ensureColumn(this.pool(), 'quotation_items', 'purchaseTotalOriginal', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `purchaseUnitPrice`');
+    await ensureColumn(this.pool(), 'quotation_items', 'purchaseTotalUsd', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `purchaseTotalOriginal`');
+    await ensureColumn(this.pool(), 'quotation_items', 'firstMileFreightUsd', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `isCustomsClearance`');
     await ensureColumn(this.pool(), 'settlement_items', 'brand', 'VARCHAR(255) NULL AFTER `productName`');
     await ensureColumn(this.pool(), 'settlement_items', 'invoiceNo', 'VARCHAR(100) NULL AFTER `receivedRevenueUsd`');
     await ensureColumn(this.pool(), 'settlement_items', 'invoiceEntity', 'VARCHAR(255) NULL AFTER `receivedRevenueUsd`');
@@ -177,6 +182,7 @@ export class DatabaseStorageService {
     await ensureColumn(this.pool(), 'settlement_sales', 'invoiceEntity', 'VARCHAR(255) NULL AFTER `receivedRevenueUsd`');
     await ensureColumn(this.pool(), 'settlement_sales', 'invoiceDate', 'VARCHAR(32) NULL AFTER `invoiceEntity`');
     await ensureColumn(this.pool(), 'settlement_sales', 'invoiceExchangeRate', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `invoiceDate`');
+    await ensureColumn(this.pool(), 'settlement_invoices', 'isPaid', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER `usdAmount`');
     await ensureTable(this.pool(), 'settlement_invoices', `
       CREATE TABLE IF NOT EXISTS ${quoteId('settlement_invoices')} (
         ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
@@ -193,6 +199,7 @@ export class DatabaseStorageService {
         ${quoteId('currency')} VARCHAR(10) NOT NULL DEFAULT 'CNY',
         ${quoteId('exchangeRate')} DECIMAL(14,4) NOT NULL DEFAULT 0,
         ${quoteId('usdAmount')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('isPaid')} TINYINT(1) NOT NULL DEFAULT 0,
         ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
         ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
         INDEX ${quoteId('idx_settlement_invoices_project')} (${quoteId('projectId')})

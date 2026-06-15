@@ -31,24 +31,24 @@ describe('calculateQuotation', () => {
       publicFeeTotal: 150,
       status: 'completed',
       items: [
-        { productId: 'p1', purchaseQty: 2, purchasePriceCny: 700, transportType: 'sea', isCustomsClearance: true, enableNom: true },
-        { productId: 'p2', purchaseQty: 3, purchasePriceCny: 210, transportType: 'air', isCustomsClearance: true, markupRate: 10 },
+        { productId: 'p1', purchaseQty: 2, purchaseCurrency: 'CNY', purchaseUnitPrice: 700, transportType: 'sea', isCustomsClearance: true, enableNom: true },
+        { productId: 'p2', purchaseQty: 3, purchaseCurrency: 'CNY', purchaseUnitPrice: 210, transportType: 'air', isCustomsClearance: true, markupRate: 10 },
       ],
     };
 
     const result = calculateQuotation(dto, products, tariffs);
 
     expect(result.quotation.publicFeeTotal).toBe(100);
-    expect(result.items[0].firstMileFreightCny).toBeCloseTo(320, 4);
-    expect(result.items[1].firstMileFreightCny).toBeCloseTo(600, 4);
-    expect(result.quotation.totalCifUsd).toBeCloseTo(388.0657, 4);
-    expect(result.items[0].publicFeeAllocationUsd).toBeCloseTo(57.3886, 4);
-    expect(result.items[1].publicFeeAllocationUsd).toBeCloseTo(42.6114, 4);
-    expect(result.items[0].ddpUnitPriceUsd).toBeCloseTo(205.6364, 4);
-    expect(result.items[0].revenueUsd).toBeCloseTo(514.091, 4);
-    expect(result.quotation.totalDdpUsd).toBeCloseTo(658.931, 4);
-    expect(result.quotation.totalRevenueUsd).toBeCloseTo(786.515, 4);
-    expect(result.quotation.totalProfitUsd).toBeCloseTo(127.584, 4);
+    expect(result.items[0].firstMileFreightUsd).toBeCloseTo(45.7143, 4);
+    expect(result.items[1].firstMileFreightUsd).toBeCloseTo(85.7143, 4);
+    expect(result.quotation.totalCifUsd).toBeCloseTo(421.4286, 4);
+    expect(result.items[0].publicFeeAllocationUsd).toBeCloseTo(58.3051, 4);
+    expect(result.items[1].publicFeeAllocationUsd).toBeCloseTo(41.6949, 4);
+    expect(result.items[0].ddpUnitPriceUsd).toBeCloseTo(219.2097, 4);
+    expect(result.items[0].revenueUsd).toBeCloseTo(548.0242, 4);
+    expect(result.quotation.totalDdpUsd).toBeCloseTo(698, 4);
+    expect(result.quotation.totalRevenueUsd).toBeCloseTo(833.5629, 4);
+    expect(result.quotation.totalProfitUsd).toBeCloseTo(135.5629, 4);
   });
 
   it('uses tax excluded purchase unit price as the CIF cost basis', () => {
@@ -74,16 +74,57 @@ describe('calculateQuotation', () => {
       publicFeeTotal: 0,
       status: 'draft',
       items: [
-        { productId: 'p1', purchaseQty: 10, purchasePriceCny: 113, purchasePriceExclTaxCny: 100, transportType: 'none', isCustomsClearance: false },
+        { productId: 'p1', purchaseQty: 10, purchaseCurrency: 'CNY', purchaseUnitPrice: 100, transportType: 'none', isCustomsClearance: false },
       ],
     };
 
     const result = calculateQuotation(dto, products, []);
 
-    expect(result.items[0].totalTaxIncludedCny).toBeCloseTo(1130, 4);
-    expect(result.items[0].totalExclTaxCny).toBeCloseTo(1000, 4);
-    expect(result.items[0].cifCny).toBeCloseTo(1000, 4);
+    expect(result.items[0].purchaseTotalOriginal).toBeCloseTo(1000, 4);
+    expect(result.items[0].purchaseTotalUsd).toBeCloseTo(142.8571, 4);
     expect(result.items[0].cifUsd).toBeCloseTo(142.8571, 4);
+  });
+
+  it('converts original purchase currency totals to USD before CIF calculations', () => {
+    const products: Product[] = [
+      product({ id: 'cny', productCode: 'CNY', length: 10, width: 10, height: 10, grossWeight: 1, hsCodeMx: '8501' }),
+      product({ id: 'usd', productCode: 'USD', length: 10, width: 10, height: 10, grossWeight: 1, hsCodeMx: '8501' }),
+      product({ id: 'mxn', productCode: 'MXN', length: 10, width: 10, height: 10, grossWeight: 1, hsCodeMx: '8501' }),
+    ];
+    const dto: CreateQuotationDto = {
+      exchangeRateUsd: 7,
+      exchangeRateMxn: 0.05,
+      capitalCostRate: 0,
+      accountPeriod: 0,
+      badDebtRate: 0,
+      customsFeeRate: 0,
+      vatOverseas: 16,
+      markupRate: 0,
+      seaFreightRate: 0,
+      airFreightRate: 0,
+      nomFee: 0,
+      customsMiscFee: 0,
+      lastMileFee: 0,
+      storageOperationFee: 0,
+      implementationFee: 0,
+      publicFeeTotal: 0,
+      status: 'draft',
+      items: [
+        { productId: 'cny', purchaseQty: 2, purchaseCurrency: 'CNY', purchaseUnitPrice: 700, transportType: 'none', isCustomsClearance: false },
+        { productId: 'usd', purchaseQty: 3, purchaseCurrency: 'USD', purchaseUnitPrice: 20, transportType: 'none', isCustomsClearance: false },
+        { productId: 'mxn', purchaseQty: 4, purchaseCurrency: 'MXN', purchaseUnitPrice: 100, transportType: 'none', isCustomsClearance: false },
+      ],
+    };
+
+    const result = calculateQuotation(dto, products, []);
+
+    expect(result.items[0].purchaseTotalOriginal).toBeCloseTo(1400, 4);
+    expect(result.items[0].purchaseTotalUsd).toBeCloseTo(200, 4);
+    expect(result.items[0].cifUsd).toBeCloseTo(200, 4);
+    expect(result.items[1].purchaseTotalOriginal).toBeCloseTo(60, 4);
+    expect(result.items[1].purchaseTotalUsd).toBeCloseTo(60, 4);
+    expect(result.items[2].purchaseTotalOriginal).toBeCloseTo(400, 4);
+    expect(result.items[2].purchaseTotalUsd).toBeCloseTo(20, 4);
   });
 
   it('preserves manually entered DDP quote unit price for draft edits', () => {
@@ -112,8 +153,8 @@ describe('calculateQuotation', () => {
         {
           productId: 'p1',
           purchaseQty: 3,
-          purchasePriceCny: 113,
-          purchasePriceExclTaxCny: 100,
+          purchaseCurrency: 'CNY',
+          purchaseUnitPrice: 100,
           transportType: 'none',
           isCustomsClearance: false,
           ddpQuoteUnitUsd: 12.345678,

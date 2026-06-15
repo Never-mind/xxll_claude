@@ -8,6 +8,8 @@ export interface FieldConfig {
   label: string;
   type?: 'text' | 'number' | 'checkbox' | 'date' | 'select' | 'image';
   options?: string[];
+  readOnly?: boolean;
+  submit?: boolean;
   step?: string;
 }
 
@@ -18,10 +20,12 @@ interface AdminTableProps<T extends { id: string }> {
   fields: FieldConfig[];
   columns: FieldConfig[];
   getCellValue?: (row: T, column: FieldConfig) => unknown;
+  onFieldChange?: (draft: Partial<T>, field: FieldConfig, value: unknown) => Partial<T>;
+  prepareEdit?: (draft: Partial<T>) => Partial<T>;
   enableBulkDelete?: boolean;
 }
 
-export default function AdminTable<T extends { id: string }>({ title, endpoint, searchPlaceholder, fields, columns, getCellValue, enableBulkDelete = false }: AdminTableProps<T>) {
+export default function AdminTable<T extends { id: string }>({ title, endpoint, searchPlaceholder, fields, columns, getCellValue, onFieldChange, prepareEdit, enableBulkDelete = false }: AdminTableProps<T>) {
   const [rows, setRows] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
@@ -49,7 +53,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(
-      fields.map((field) => {
+      fields.filter((field) => field.submit !== false).map((field) => {
         const value = field.type === 'checkbox' ? form.get(field.key) === 'on' : form.get(field.key);
         return [field.key, field.type === 'number' ? Number(value || 0) : value];
       }),
@@ -99,6 +103,13 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
     await load();
   }
 
+  function updateEditingField(field: FieldConfig, value: unknown) {
+    setEditing((current) => {
+      const next = { ...current, [field.key]: value } as Partial<T>;
+      return onFieldChange ? onFieldChange(next, field, value) : next;
+    });
+  }
+
   return (
     <section className="admin-page">
       <header className="page-header admin-title-bar">
@@ -116,7 +127,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
           }}>搜索</button>
         </div>
         <div className="toolbar action-toolbar">
-          <button className="primary-action" onClick={() => setEditing({})}>+ 新增</button>
+          <button className="primary-action" onClick={() => setEditing(prepareEdit ? prepareEdit({}) : {})}>+ 新增</button>
           {enableBulkDelete && <button className="danger-action" disabled={!selectedIds.length} onClick={removeSelected}>删除</button>}
           <label className="file-action">
             导入
@@ -163,7 +174,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
                   </td>
                 ))}
                 <td className="actions">
-                  <button className="icon-button edit" title="编辑" aria-label="编辑" onClick={() => setEditing(row)}>✎</button>
+                  <button className="icon-button edit" title="编辑" aria-label="编辑" onClick={() => setEditing(prepareEdit ? prepareEdit(row) : row)}>✎</button>
                   <button className="icon-button danger" title="删除" aria-label="删除" onClick={() => remove(row.id)}>⌫</button>
                 </td>
               </tr>
@@ -215,11 +226,18 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
                   ) : field.type === 'checkbox' ? (
                     <input type="checkbox" name={field.key} defaultChecked={Boolean(editing[field.key as keyof T])} />
                   ) : field.type === 'select' ? (
-                    <select name={field.key} defaultValue={String(editing[field.key as keyof T] ?? field.options?.[0] ?? '')}>
+                    <select name={field.key} value={String(editing[field.key as keyof T] ?? field.options?.[0] ?? '')} onChange={(event) => updateEditingField(field, event.target.value)} disabled={field.readOnly}>
                       {field.options?.map((option) => <option key={option}>{option}</option>)}
                     </select>
                   ) : (
-                    <input type={field.type ?? 'text'} step={field.type === 'number' ? field.step ?? 'any' : field.step} name={field.key} defaultValue={formatInputDefault(editing[field.key as keyof T], field)} />
+                    <input
+                      type={field.type ?? 'text'}
+                      step={field.type === 'number' ? field.step ?? 'any' : field.step}
+                      name={field.key}
+                      value={formatInputDefault(editing[field.key as keyof T])}
+                      readOnly={field.readOnly}
+                      onChange={(event) => updateEditingField(field, field.type === 'number' ? event.target.value : event.target.value)}
+                    />
                   )}
                 </label>
               ))}
@@ -274,7 +292,7 @@ function formatCell(value: unknown, column: FieldConfig) {
   return String(value ?? '');
 }
 
-function formatInputDefault(value: unknown, field: FieldConfig) {
+function formatInputDefault(value: unknown) {
   if (value === undefined || value === null || value === '') return '';
   return String(value);
 }

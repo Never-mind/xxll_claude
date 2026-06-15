@@ -36,10 +36,10 @@ const itemColumnOptions = [
   { key: 'productName', label: '产品名称' },
   { key: 'brand', label: '品牌' },
   { key: 'purchaseQty', label: '数量' },
-  { key: 'purchasePriceCny', label: '采购单价(CNY)' },
-  { key: 'purchasePriceExclTaxCny', label: '不含税采购单价(CNY)' },
-  { key: 'totalTaxIncludedCny', label: '采购总价(CNY)' },
-  { key: 'totalExclTaxCny', label: '不含税采购总价(CNY)' },
+  { key: 'purchaseCurrency', label: '币种' },
+  { key: 'purchaseUnitPrice', label: '不含税采购单价' },
+  { key: 'purchaseTotalOriginal', label: '不含税采购总价（原币种）' },
+  { key: 'purchaseTotalUsd', label: '不含税采购总价（USD）' },
   { key: 'transportType', label: '运输方式' },
   { key: 'isCustomsClearance', label: '清关' },
   { key: 'enableNom', label: 'NOM认证' },
@@ -178,8 +178,8 @@ export default function QuotationGenerate() {
         productCode: item.productCode,
         productName: item.productName,
         purchaseQty: item.purchaseQty,
-        purchasePriceCny: item.purchasePriceCny,
-        purchasePriceExclTaxCny: safeDivide(item.totalExclTaxCny, item.purchaseQty) || safeDivide(item.purchasePriceCny, 1.13),
+        purchaseCurrency: item.purchaseCurrency || 'CNY',
+        purchaseUnitPrice: item.purchaseUnitPrice ?? legacyPurchaseUnitPrice(item),
         transportType: item.transportType,
         isCustomsClearance: item.isCustomsClearance,
         markupRate: item.markupRate,
@@ -196,7 +196,6 @@ export default function QuotationGenerate() {
     }).catch((err) => setError(err.message));
   }, [id]);
 
-  const productOptions = useMemo(() => products.map((product) => ({ value: product.id, label: productOptionLabel(product) })), [products]);
   const filteredProducts = useMemo(() => productMatches.slice(0, 10), [productMatches]);
   const effectiveParams = useMemo(() => ({
     ...params,
@@ -217,8 +216,8 @@ export default function QuotationGenerate() {
           productCode: product.productCode,
           productName: product.name,
           purchaseQty: 1,
-        purchasePriceCny: product.suggestedPrice || 0,
-        purchasePriceExclTaxCny: safeDivide(product.suggestedPrice || 0, 1.13),
+        purchaseCurrency: 'CNY',
+        purchaseUnitPrice: safeDivide(product.suggestedPrice || 0, 1.13),
         transportType: 'sea',
         isCustomsClearance: true,
         enableNom: product.needNom,
@@ -476,10 +475,20 @@ export default function QuotationGenerate() {
       return <td className="quotation-product-column" key={key}>{currentProduct?.brand || '-'}</td>;
     }
     if (key === 'purchaseQty') return <td key={key}><input type="number" step="1" value={numberInputValue(item.purchaseQty)} onChange={(event) => updateItem(index, { purchaseQty: parseIntegerInput(event.target.value) } as Partial<CreateQuotationItemDto>)} /></td>;
-    if (key === 'purchasePriceCny') return <td key={key}><input type="number" step="any" value={decimalInputValue(item.purchasePriceCny)} onChange={(event) => updatePurchasePrice(index, parseNumberInput(event.target.value))} /></td>;
-    if (key === 'purchasePriceExclTaxCny') return <td key={key}><input type="number" step="any" value={decimalInputValue(item.purchasePriceExclTaxCny)} onChange={(event) => updatePurchasePriceExclTax(index, parseNumberInput(event.target.value))} /></td>;
-    if (key === 'totalTaxIncludedCny') return numeric(preview?.totalTaxIncludedCny);
-    if (key === 'totalExclTaxCny') return numeric(preview?.totalExclTaxCny);
+    if (key === 'purchaseCurrency') {
+      return (
+        <td key={key}>
+          <select value={item.purchaseCurrency || 'CNY'} onChange={(event) => updateItem(index, { purchaseCurrency: event.target.value as CreateQuotationItemDto['purchaseCurrency'] })}>
+            <option value="CNY">CNY</option>
+            <option value="USD">USD</option>
+            <option value="MXN">MXN</option>
+          </select>
+        </td>
+      );
+    }
+    if (key === 'purchaseUnitPrice') return <td key={key}><input type="number" step="any" value={decimalInputValue(item.purchaseUnitPrice)} onChange={(event) => updateItem(index, { purchaseUnitPrice: parseNumberInput(event.target.value) } as Partial<CreateQuotationItemDto>)} /></td>;
+    if (key === 'purchaseTotalOriginal') return numeric(preview?.purchaseTotalOriginal);
+    if (key === 'purchaseTotalUsd') return numeric(preview?.purchaseTotalUsd);
     if (key === 'transportType') {
       return (
         <td key={key}>
@@ -550,28 +559,14 @@ export default function QuotationGenerate() {
     updateItem(index, { markupRate } as Partial<CreateQuotationItemDto>);
   }
 
-  function updatePurchasePrice(index: number, purchasePriceCny: number | undefined) {
-    updateItem(index, {
-      purchasePriceCny: purchasePriceCny as number,
-      purchasePriceExclTaxCny: safeDivide(purchasePriceCny, 1.13),
-    });
-  }
-
-  function updatePurchasePriceExclTax(index: number, purchasePriceExclTaxCny: number | undefined) {
-    updateItem(index, {
-      purchasePriceExclTaxCny,
-      purchasePriceCny: purchasePriceExclTaxCny === undefined ? undefined as unknown as number : purchasePriceExclTaxCny * 1.13,
-    });
-  }
-
   function updateProduct(index: number, productId: string, selectedProduct?: Product) {
     const product = selectedProduct ?? products.find((candidate) => candidate.id === productId);
     updateItem(index, {
       productId,
       productCode: product?.productCode,
       productName: product?.name,
-      purchasePriceCny: product?.suggestedPrice ?? 0,
-      purchasePriceExclTaxCny: safeDivide(product?.suggestedPrice ?? 0, 1.13),
+      purchaseCurrency: 'CNY',
+      purchaseUnitPrice: safeDivide(product?.suggestedPrice ?? 0, 1.13),
       enableNom: product?.needNom ?? false,
     });
   }
@@ -655,10 +650,10 @@ export default function QuotationGenerate() {
         产品名称: product?.name || item.productName || '',
         品牌: product?.brand || '',
         数量: Math.trunc(Number(item.purchaseQty || 0)),
-        '采购单价(CNY)': item.purchasePriceCny,
-        '不含税采购单价(CNY)': item.purchasePriceExclTaxCny ?? safeDivide(item.purchasePriceCny, 1.13),
-        '采购总价(CNY)': preview.totalTaxIncludedCny,
-        '不含税采购总价(CNY)': preview.totalExclTaxCny,
+        币种: item.purchaseCurrency || 'CNY',
+        不含税采购单价: item.purchaseUnitPrice,
+        '不含税采购总价（原币种）': preview.purchaseTotalOriginal,
+        '不含税采购总价（USD）': preview.purchaseTotalUsd,
         运输方式: item.transportType,
         清关: item.isCustomsClearance ? '是' : '否',
         NOM认证: item.enableNom ? '是' : '否',
@@ -693,14 +688,15 @@ export default function QuotationGenerate() {
   }
 
   function downloadImportTemplate() {
-    const headers = ['产品编码', '产品名称', '数量', '采购单价', '运输方式', '清关', 'NOM认证', 'DDP不含税单价（USD）'];
+    const headers = ['产品编码', '产品名称', '数量', '币种', '不含税采购单价', '运输方式', '清关', 'NOM认证', 'DDP不含税单价（USD）'];
     const workbook = XLSX.utils.book_new();
     const sheet = XLSX.utils.aoa_to_sheet([headers]);
     sheet['!cols'] = [
       { wch: 18 },
       { wch: 28 },
       { wch: 10 },
-      { wch: 14 },
+      { wch: 10 },
+      { wch: 16 },
       { wch: 14 },
       { wch: 10 },
       { wch: 12 },
@@ -769,7 +765,11 @@ export default function QuotationGenerate() {
       const importedRows = await Promise.all(rows.map(async (row, index) => {
         const product = await productForImportRow(row);
         if (!product) return undefined;
-        const purchasePriceCny = numberFromRow(row, ['采购单价', '采购单价CNY', '采购单价(CNY)'], product.suggestedPrice || 0);
+        const purchaseCurrency = normalizePurchaseCurrency(valueFromRow(row, ['币种', '采购币种']), 'CNY');
+        const legacyPurchasePriceCny = numberFromRow(row, ['采购单价', '采购单价CNY', '采购单价(CNY)'], product.suggestedPrice || 0);
+        const purchaseUnitPrice = optionalNumberFromRow(row, ['不含税采购单价'])
+          ?? optionalNumberFromRow(row, ['不含税采购单价CNY', '不含税采购单价(CNY)'])
+          ?? safeDivide(legacyPurchasePriceCny, 1.13);
         const ddpQuoteUnitUsd = optionalNumberFromRow(row, ['DDP不含税单价（USD）', 'DDP不含税单价(USD)', 'DDP不含税单价USD']);
         return {
           item: {
@@ -777,8 +777,8 @@ export default function QuotationGenerate() {
             productCode: product.productCode,
             productName: product.name,
             purchaseQty: Math.trunc(numberFromRow(row, ['数量'], 0)),
-            purchasePriceCny,
-            purchasePriceExclTaxCny: optionalNumberFromRow(row, ['不含税采购单价CNY', '不含税采购单价(CNY)']) ?? safeDivide(purchasePriceCny, 1.13),
+            purchaseCurrency,
+            purchaseUnitPrice,
             transportType: normalizeTransportType(valueFromRow(row, ['运输方式'])),
             isCustomsClearance: normalizeBoolean(valueFromRow(row, ['清关', '是否清关']), true),
             enableNom: normalizeBoolean(valueFromRow(row, ['NOM认证']), product.needNom),
@@ -847,6 +847,11 @@ function normalizeTransportType(value: unknown): CreateQuotationItemDto['transpo
   if (['air', '空运'].includes(normalized)) return 'air';
   if (['none', '无', '不运输'].includes(normalized)) return 'none';
   return 'sea';
+}
+
+function normalizePurchaseCurrency(value: unknown, fallback: CreateQuotationItemDto['purchaseCurrency'] = 'CNY'): CreateQuotationItemDto['purchaseCurrency'] {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  return normalized === 'CNY' || normalized === 'USD' || normalized === 'MXN' ? normalized : fallback;
 }
 
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {
@@ -918,7 +923,7 @@ function productFromQuotationItem(item: QuotationDetail['items'][number]): Produ
     height: 0,
     grossWeight: 0,
     hsCodeMx: '',
-    suggestedPrice: item.purchasePriceCny,
+    suggestedPrice: item.purchaseCurrency === 'CNY' ? item.purchaseUnitPrice : 0,
     isMagnetic: false,
     isElectric: false,
     needNom: item.enableNom,
@@ -927,23 +932,26 @@ function productFromQuotationItem(item: QuotationDetail['items'][number]): Produ
   };
 }
 
-function productNameWithBrand(product: Product | undefined, item: CreateQuotationItemDto): string {
-  const name = product?.name || item.productName || '';
-  const brand = product?.brand || '';
-  return [name, brand].filter(Boolean).join(' ');
+function legacyPurchaseUnitPrice(item: QuotationDetail['items'][number]): number {
+  const legacy = item as QuotationDetail['items'][number] & {
+    purchasePriceCny?: number;
+    purchasePriceExclTaxCny?: number;
+    totalExclTaxCny?: number;
+  };
+  if (item.purchaseUnitPrice) return item.purchaseUnitPrice;
+  if (legacy.purchasePriceExclTaxCny) return legacy.purchasePriceExclTaxCny;
+  if (legacy.totalExclTaxCny) return safeDivide(Number(legacy.totalExclTaxCny), Number(item.purchaseQty || 0));
+  if (legacy.purchasePriceCny) return safeDivide(Number(legacy.purchasePriceCny), 1.13);
+  return 0;
 }
 
 function productOptionLabel(product: Product): string {
   return [product.productCode, product.name].filter(Boolean).join(' ');
 }
 
-function quotationItemProductLabel(item: CreateQuotationItemDto): string {
-  return [item.productCode, item.productName, item.productId].filter(Boolean).join(' ');
-}
-
 interface PreviewItem {
-  totalTaxIncludedCny: number;
-  totalExclTaxCny: number;
+  purchaseTotalOriginal: number;
+  purchaseTotalUsd: number;
   firstMileFreightUsd: number;
   cifUsd: number;
   igiTaxRate: number;
@@ -954,9 +962,12 @@ interface PreviewItem {
   ddpTotalUsd: number;
   ddpUnitPriceUsd: number;
   ddpQuoteUnitUsd: number;
+  manualQuoteUnitUsd?: number;
   revenueUsd: number;
   operatingProfitUsd: number;
   grossMarginRate: number;
+  markupRate: number;
+  purchaseQty: number;
 }
 
 function calculatePreview(
@@ -971,14 +982,10 @@ function calculatePreview(
     if (!product) return emptyPreview();
     const tariff = tariffs.find((candidate) => candidate.hsCode === product.hsCodeMx);
     const purchaseQty = Number(item.purchaseQty || 0);
-    const purchasePriceExclTaxCny = item.purchasePriceExclTaxCny === undefined
-      ? safeDivide(Number(item.purchasePriceCny || 0), 1.13)
-      : Number(item.purchasePriceExclTaxCny || 0);
-    const purchasePriceCny = item.purchasePriceCny === undefined
-      ? purchasePriceExclTaxCny * 1.13
-      : Number(item.purchasePriceCny || 0);
-    const totalTaxIncludedCny = purchaseQty * purchasePriceCny;
-    const totalExclTaxCny = purchaseQty * purchasePriceExclTaxCny;
+    const purchaseCurrency = item.purchaseCurrency || 'CNY';
+    const purchaseUnitPrice = item.purchaseUnitPrice ?? item.purchasePriceExclTaxCny ?? safeDivide(Number(item.purchasePriceCny || 0), 1.13);
+    const purchaseTotalOriginal = purchaseQty * Number(purchaseUnitPrice || 0);
+    const purchaseTotalUsd = convertPurchaseTotalToUsd(purchaseTotalOriginal, purchaseCurrency, params);
     const length = Number(product.length || 0);
     const width = Number(product.width || 0);
     const height = Number(product.height || 0);
@@ -990,8 +997,7 @@ function calculatePreview(
         ? length * width * height / 1000000 * params.seaFreightRate * purchaseQty
         : 0;
     const firstMileFreightUsd = safeDivide(firstMileFreightCny, params.exchangeRateUsd);
-    const cifCny = totalExclTaxCny + firstMileFreightCny;
-    const cifUsd = safeDivide(cifCny, params.exchangeRateUsd);
+    const cifUsd = purchaseTotalUsd + firstMileFreightUsd;
     const igiTaxRate = item.isCustomsClearance ? Number(tariff?.taxRate ?? 0) : 0;
     const tariffUsd = cifUsd * igiTaxRate / 100;
     const capitalCostUsd = cifUsd * params.capitalCostRate / 100 * params.accountPeriod / 12;
@@ -1008,8 +1014,8 @@ function calculatePreview(
         : 0;
     return {
       cifUsd,
-      totalTaxIncludedCny,
-      totalExclTaxCny,
+      purchaseTotalOriginal,
+      purchaseTotalUsd,
       firstMileFreightUsd,
       igiTaxRate,
       tariffUsd,
@@ -1065,8 +1071,7 @@ function summarizePreview(items: CreateQuotationItemDto[], previewItems: Preview
 function itemColumnTotal(key: string, items: CreateQuotationItemDto[], previewItems: PreviewItem[]) {
   if (key === 'productCode') return '合计';
   if (key === 'purchaseQty') return integer(items.reduce((sum, item) => sum + Number(item.purchaseQty || 0), 0));
-  if (key === 'purchasePriceCny') return money(items.reduce((sum, item) => sum + Number(item.purchasePriceCny || 0), 0));
-  if (key === 'purchasePriceExclTaxCny') return money(items.reduce((sum, item) => sum + Number(item.purchasePriceExclTaxCny || 0), 0));
+  if (key === 'purchaseUnitPrice') return money(items.reduce((sum, item) => sum + Number(item.purchaseUnitPrice || 0), 0));
   if (!isSummableItemColumn(key)) return '';
   return money(previewItems.reduce((sum, item) => sum + Number(item[key as keyof PreviewItem] || 0), 0));
 }
@@ -1074,10 +1079,9 @@ function itemColumnTotal(key: string, items: CreateQuotationItemDto[], previewIt
 function isSummableItemColumn(key: string) {
   return [
     'purchaseQty',
-    'purchasePriceCny',
-    'purchasePriceExclTaxCny',
-    'totalTaxIncludedCny',
-    'totalExclTaxCny',
+    'purchaseUnitPrice',
+    'purchaseTotalOriginal',
+    'purchaseTotalUsd',
     'firstMileFreightUsd',
     'cifUsd',
     'tariffUsd',
@@ -1095,8 +1099,8 @@ function isSummableItemColumn(key: string) {
 function emptyPreview(): PreviewItem {
   return {
     cifUsd: 0,
-    totalTaxIncludedCny: 0,
-    totalExclTaxCny: 0,
+    purchaseTotalOriginal: 0,
+    purchaseTotalUsd: 0,
     firstMileFreightUsd: 0,
     igiTaxRate: 0,
     tariffUsd: 0,
@@ -1109,6 +1113,8 @@ function emptyPreview(): PreviewItem {
     revenueUsd: 0,
     operatingProfitUsd: 0,
     grossMarginRate: 0,
+    markupRate: 0,
+    purchaseQty: 0,
   };
 }
 
@@ -1116,8 +1122,17 @@ function safeDivide(value: number | undefined, divisor: number) {
   return divisor ? Number(value || 0) / divisor : 0;
 }
 
-function roundPreview<T extends Record<string, number>>(input: T): T {
-  return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, Math.round(value * 10_000) / 10_000])) as T;
+function convertPurchaseTotalToUsd(value: number, currency: string, params: Pick<typeof defaultParams, 'exchangeRateUsd' | 'exchangeRateMxn'>) {
+  if (currency === 'USD') return value;
+  if (currency === 'MXN') return value * Number(params.exchangeRateMxn || 0);
+  return safeDivide(value, params.exchangeRateUsd);
+}
+
+function roundPreview<T extends Record<string, unknown>>(input: T): T {
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [
+    key,
+    typeof value === 'number' ? Math.round(value * 10_000) / 10_000 : value,
+  ])) as T;
 }
 
 function money(value = 0) {
