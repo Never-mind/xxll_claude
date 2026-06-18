@@ -7,6 +7,8 @@ import type {
   Customer,
   FinanceInvoiceRow,
   HistoryQuotation,
+  LoginDto,
+  LoginResult,
   PageResult,
   Product,
   Quotation,
@@ -57,6 +59,10 @@ export function download(path: string): void {
   window.location.href = `/api${path}`;
 }
 
+export async function login(credentials: LoginDto): Promise<LoginResult> {
+  return apiWrite<LoginResult>('/auth/login', 'POST', credentials);
+}
+
 export type ProductPage = PageResult<Product>;
 export type TariffPage = PageResult<TariffRate>;
 export type QuotationPage = PageResult<Quotation>;
@@ -73,6 +79,8 @@ export type {
   CreateQuotationDto,
   Customer,
   FinanceInvoiceRow,
+  LoginDto,
+  LoginResult,
   SettlementCurrency,
   SettlementItem,
   SettlementInvoiceType,

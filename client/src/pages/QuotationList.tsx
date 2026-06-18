@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet, apiWrite, download } from '../api.js';
+import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { Quotation, QuotationPage } from '../api.js';
 
 const tabs = [
@@ -16,15 +17,21 @@ export default function QuotationList() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [loading, setLoading] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   async function load(nextPage = page, nextPageSize = pageSize) {
-    const result = await apiGet<QuotationPage>(`/quotations?page=${nextPage}&pageSize=${nextPageSize}&status=${status}`);
-    setRows(result.items);
-    setTotal(result.total);
-    setSelectedIds([]);
-    const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
-    if (nextPage > nextTotalPages) setPage(nextTotalPages);
+    setLoading(true);
+    try {
+      const result = await apiGet<QuotationPage>(`/quotations?page=${nextPage}&pageSize=${nextPageSize}&status=${status}`);
+      setRows(result.items);
+      setTotal(result.total);
+      setSelectedIds([]);
+      const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
+      if (nextPage > nextTotalPages) setPage(nextTotalPages);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -49,7 +56,7 @@ export default function QuotationList() {
         </div>
         <div className="segmented">
           {tabs.map(([value, label]) => (
-            <button key={value} className={status === value ? 'active' : ''} onClick={() => {
+            <button key={value} disabled={loading} className={status === value ? 'active' : ''} onClick={() => {
               setStatus(value);
               setPage(1);
             }}>
@@ -67,6 +74,7 @@ export default function QuotationList() {
               <th>
                 <input
                   type="checkbox"
+                  className="selection-checkbox"
                   aria-label="全选"
                   checked={rows.length > 0 && selectedIds.length === rows.length}
                   onChange={(event) => setSelectedIds(event.target.checked ? rows.map((row) => row.id) : [])}
@@ -86,11 +94,13 @@ export default function QuotationList() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
+            {loading && <LoadingTableRows columns={12} rows={Math.min(pageSize, 8)} />}
+            {!loading && rows.map((row) => (
+              <tr key={row.id} className={`selection-row ${selectedIds.includes(row.id) ? 'is-selected' : ''}`}>
                 <td>
                   <input
                     type="checkbox"
+                    className="selection-checkbox"
                     aria-label="选择"
                     checked={selectedIds.includes(row.id)}
                     onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))}
@@ -114,6 +124,11 @@ export default function QuotationList() {
                 </td>
               </tr>
             ))}
+            {!loading && !rows.length && (
+              <tr>
+                <td colSpan={12} className="empty-cell">暂无报价单数据</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

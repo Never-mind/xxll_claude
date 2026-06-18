@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="760" viewBox="0 0 1040 760">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .bg { fill: #f5f7fb; }
+      .card { fill: #fff; stroke: #dbe3ef; stroke-width: 1; filter: url(#shadow); }
+      .title { font: 700 22px Inter, "Microsoft YaHei", Arial, sans-serif; fill: #111827; }
+      .sub { font: 500 14px Inter, "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .head { fill: #f8fafc; }
+      .line { stroke: #e2e8f0; stroke-width: 1; }
+      .text { font: 500 14px Inter, "Microsoft YaHei", Arial, sans-serif; fill: #1f2937; }
+      .muted { font: 500 12px Inter, "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .label { font: 800 14px Inter, "Microsoft YaHei", Arial, sans-serif; fill: #2563eb; letter-spacing: 0; }
+      .check-stroke { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+      .check-stroke-dark { fill: none; stroke: #2563eb; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1040" height="760"/>
+  <text x="52" y="54" class="title">多选勾选框样式方案</text>
+  <text x="52" y="82" class="sub">保留现有表格结构，只替换复选框视觉。每个方案包含未选中、选中、表头全选三种状态。</text>
+
+  <!-- Option 1 -->
+  <g transform="translate(52 118)">
+    <rect class="card" width="450" height="260" rx="8"/>
+    <text x="24" y="36" class="label">方案 1：标准小正方格</text>
+    <text x="24" y="58" class="sub">最通用，清晰稳定，适合后台系统。</text>
+    <rect x="24" y="82" width="402" height="40" rx="0" class="head"/>
+    <line x1="24" y1="122" x2="426" y2="122" class="line"/>
+    <text x="104" y="107" class="muted">报价单号</text>
+    <rect x="42" y="95" width="16" height="16" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <rect x="66" y="95" width="16" height="16" rx="3" fill="#2563eb" stroke="#2563eb" stroke-width="1.5"/>
+    <path d="M70.5 103.2l3.2 3.2 5.8-7" class="check-stroke"/>
+    <line x1="24" y1="166" x2="426" y2="166" class="line"/>
+    <line x1="24" y1="210" x2="426" y2="210" class="line"/>
+    <rect x="42" y="137" width="16" height="16" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="104" y="151" class="text">QTN-20260612-001</text>
+    <rect x="42" y="181" width="16" height="16" rx="3" fill="#2563eb" stroke="#2563eb" stroke-width="1.5"/>
+    <path d="M46.5 189.2l3.2 3.2 5.8-7" class="check-stroke"/>
+    <text x="104" y="195" class="text">QTN-20260608-005</text>
+    <rect x="42" y="225" width="16" height="16" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="104" y="239" class="text">QTN-20260608-004</text>
+  </g>
+
+  <!-- Option 2 -->
+  <g transform="translate(538 118)">
+    <rect class="card" width="450" height="260" rx="8"/>
+    <text x="24" y="36" class="label">方案 2：柔和圆角方格</text>
+    <text x="24" y="58" class="sub">视觉更轻，蓝色更柔和，适合现代简约风。</text>
+    <rect x="24" y="82" width="402" height="40" rx="0" class="head"/>
+    <line x1="24" y1="122" x2="426" y2="122" class="line"/>
+    <text x="104" y="107" class="muted">报价单号</text>
+    <rect x="42" y="94" width="18" height="18" rx="5" fill="#fff" stroke="#d5dde8" stroke-width="1.5"/>
+    <rect x="66" y="94" width="18" height="18" rx="5" fill="#2f6fed" stroke="#2f6fed" stroke-width="1.5"/>
+    <path d="M70.8 103.3l3.4 3.4 6.2-7.2" class="check-stroke"/>
+    <line x1="24" y1="166" x2="426" y2="166" class="line"/>
+    <line x1="24" y1="210" x2="426" y2="210" class="line"/>
+    <rect x="42" y="136" width="18" height="18" rx="5" fill="#fff" stroke="#d5dde8" stroke-width="1.5"/>
+    <text x="104" y="151" class="text">QTN-20260612-001</text>
+    <rect x="42" y="180" width="18" height="18" rx="5" fill="#2f6fed" stroke="#2f6fed" stroke-width="1.5"/>
+    <path d="M46.8 189.3l3.4 3.4 6.2-7.2" class="check-stroke"/>
+    <text x="104" y="195" class="text">QTN-20260608-005</text>
+    <rect x="42" y="224" width="18" height="18" rx="5" fill="#fff" stroke="#d5dde8" stroke-width="1.5"/>
+    <text x="104" y="239" class="text">QTN-20260608-004</text>
+  </g>
+
+  <!-- Option 3 -->
+  <g transform="translate(52 430)">
+    <rect class="card" width="450" height="260" rx="8"/>
+    <text x="24" y="36" class="label">方案 3：描边强调方格</text>
+    <text x="24" y="58" class="sub">未选中更淡，选中只用蓝色边框和浅蓝底。</text>
+    <rect x="24" y="82" width="402" height="40" rx="0" class="head"/>
+    <line x1="24" y1="122" x2="426" y2="122" class="line"/>
+    <text x="104" y="107" class="muted">报价单号</text>
+    <rect x="42" y="95" width="16" height="16" rx="2" fill="#fff" stroke="#d7dee9" stroke-width="1.5"/>
+    <rect x="66" y="95" width="16" height="16" rx="2" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <path d="M70.5 103.2l3.2 3.2 5.8-7" class="check-stroke-dark"/>
+    <line x1="24" y1="166" x2="426" y2="166" class="line"/>
+    <line x1="24" y1="210" x2="426" y2="210" class="line"/>
+    <rect x="42" y="137" width="16" height="16" rx="2" fill="#fff" stroke="#d7dee9" stroke-width="1.5"/>
+    <text x="104" y="151" class="text">QTN-20260612-001</text>
+    <rect x="42" y="181" width="16" height="16" rx="2" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <path d="M46.5 189.2l3.2 3.2 5.8-7" class="check-stroke-dark"/>
+    <text x="104" y="195" class="text">QTN-20260608-005</text>
+    <rect x="42" y="225" width="16" height="16" rx="2" fill="#fff" stroke="#d7dee9" stroke-width="1.5"/>
+    <text x="104" y="239" class="text">QTN-20260608-004</text>
+  </g>
+
+  <!-- Option 4 -->
+  <g transform="translate(538 430)">
+    <rect class="card" width="450" height="260" rx="8"/>
+    <text x="24" y="36" class="label">方案 4：行选中增强</text>
+    <text x="24" y="58" class="sub">勾选框标准化，同时给被选中的行加浅蓝背景。</text>
+    <rect x="24" y="82" width="402" height="40" rx="0" class="head"/>
+    <line x1="24" y1="122" x2="426" y2="122" class="line"/>
+    <text x="104" y="107" class="muted">报价单号</text>
+    <rect x="42" y="95" width="16" height="16" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <rect x="66" y="95" width="16" height="16" rx="3" fill="#2563eb" stroke="#2563eb" stroke-width="1.5"/>
+    <path d="M70.5 103.2l3.2 3.2 5.8-7" class="check-stroke"/>
+    <rect x="24" y="166" width="402" height="44" fill="#eff6ff"/>
+    <line x1="24" y1="166" x2="426" y2="166" class="line"/>
+    <line x1="24" y1="210" x2="426" y2="210" class="line"/>
+    <rect x="42" y="137" width="16" height="16" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="104" y="151" class="text">QTN-20260612-001</text>
+    <rect x="42" y="181" width="16" height="16" rx="3" fill="#2563eb" stroke="#2563eb" stroke-width="1.5"/>
+    <path d="M46.5 189.2l3.2 3.2 5.8-7" class="check-stroke"/>
+    <text x="104" y="195" class="text">QTN-20260608-005</text>
+    <rect x="42" y="225" width="16" height="16" rx="3" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+    <text x="104" y="239" class="text">QTN-20260608-004</text>
+  </g>
+</svg>

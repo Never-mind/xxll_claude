@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { FinanceInvoicePage, FinanceInvoiceRow, SettlementInvoiceType } from '../api.js';
 
 export default function FinanceInvoicePage() {
@@ -14,6 +15,7 @@ export default function FinanceInvoicePage() {
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const totals = useMemo(() => rows.reduce((current, row) => {
     if (row.type === 'income') current.income += Number(row.usdAmount || 0);
@@ -23,14 +25,19 @@ export default function FinanceInvoicePage() {
   }, { income: 0, cost: 0, net: 0 }), [rows]);
 
   async function load(nextPage = page, nextPageSize = pageSize) {
-    const query = invoiceQuery(nextPage, nextPageSize, keyword, type, accountPeriodStart, accountPeriodEnd);
-    const result = await apiGet<FinanceInvoicePage>(
-      `/finance/invoices?${query}`,
-    );
-    setRows(result.items);
-    setTotal(result.total);
-    const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
-    if (nextPage > nextTotalPages) setPage(nextTotalPages);
+    setLoading(true);
+    try {
+      const query = invoiceQuery(nextPage, nextPageSize, keyword, type, accountPeriodStart, accountPeriodEnd);
+      const result = await apiGet<FinanceInvoicePage>(
+        `/finance/invoices?${query}`,
+      );
+      setRows(result.items);
+      setTotal(result.total);
+      const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
+      if (nextPage > nextTotalPages) setPage(nextTotalPages);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -108,7 +115,8 @@ export default function FinanceInvoicePage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {loading && <LoadingTableRows columns={18} rows={Math.min(pageSize, 8)} />}
+            {!loading && rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.quotationNo || '-'}</td>
                 <td>{row.customerName || '-'}</td>
@@ -132,7 +140,7 @@ export default function FinanceInvoicePage() {
                 </td>
               </tr>
             ))}
-            {!rows.length && (
+            {!loading && !rows.length && (
               <tr>
                 <td colSpan={18} className="empty-cell">暂无发票明细</td>
               </tr>

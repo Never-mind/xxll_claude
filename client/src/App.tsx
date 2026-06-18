@@ -5,6 +5,7 @@ import CustomerManage from './pages/CustomerManage.js';
 import DashboardStatsPage from './pages/DashboardStatsPage.js';
 import FinanceInvoicePage from './pages/FinanceInvoicePage.js';
 import HistoryQuotationManage from './pages/HistoryQuotationManage.js';
+import LoginPage from './pages/LoginPage.js';
 import ProductManage from './pages/ProductManage.js';
 import QuotationDetailPage from './pages/QuotationDetailPage.js';
 import QuotationGenerate from './pages/QuotationGenerate.js';
@@ -46,9 +47,29 @@ const navGroups = [
 export default function App() {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [session, setSession] = useState(() => ({
+    username: localStorage.getItem('quotation.username') || '',
+    token: localStorage.getItem('quotation.session') || '',
+  }));
 
   function toggleGroup(title: string) {
     setCollapsedGroups((current) => ({ ...current, [title]: !current[title] }));
+  }
+
+  function handleLogin(username: string, token: string) {
+    localStorage.setItem('quotation.username', username);
+    localStorage.setItem('quotation.session', token);
+    setSession({ username, token });
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('quotation.username');
+    localStorage.removeItem('quotation.session');
+    setSession({ username: '', token: '' });
+  }
+
+  if (!session.token) {
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   return (
@@ -63,6 +84,10 @@ export default function App() {
         </div>
         {!sidebarCollapsed && (
           <nav className="sidebar-nav">
+            <div className="user-strip">
+              <span>{session.username}</span>
+              <button type="button" onClick={handleLogout}>退出</button>
+            </div>
             <NavLink to="/dashboard">统计面板</NavLink>
             <NavLink to="/settlement-projects">项目结算</NavLink>
             {navGroups.map((group) => (

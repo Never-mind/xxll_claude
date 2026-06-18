@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import { apiGet, apiWrite, download, upload } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { PageResult } from '../../../shared/api.interface.js';
 
 export interface FieldConfig {
@@ -34,15 +35,21 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
   const [editing, setEditing] = useState<Partial<T> | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   async function load(nextPage = page, nextPageSize = pageSize) {
-    const result = await apiGet<PageResult<T>>(`${endpoint}?keyword=${encodeURIComponent(keyword)}&page=${nextPage}&pageSize=${nextPageSize}`);
-    setRows(result.items);
-    setTotal(result.total);
-    setSelectedIds([]);
-    const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
-    if (nextPage > nextTotalPages) setPage(nextTotalPages);
+    setLoading(true);
+    try {
+      const result = await apiGet<PageResult<T>>(`${endpoint}?keyword=${encodeURIComponent(keyword)}&page=${nextPage}&pageSize=${nextPageSize}`);
+      setRows(result.items);
+      setTotal(result.total);
+      setSelectedIds([]);
+      const nextTotalPages = Math.max(1, Math.ceil(result.total / nextPageSize));
+      if (nextPage > nextTotalPages) setPage(nextTotalPages);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -145,6 +152,7 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
                 <th>
                   <input
                     type="checkbox"
+                    className="selection-checkbox"
                     aria-label="全选"
                     checked={rows.length > 0 && selectedIds.length === rows.length}
                     onChange={(event) => setSelectedIds(event.target.checked ? rows.map((row) => row.id) : [])}
@@ -156,12 +164,14 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
+            {loading && <LoadingTableRows columns={columns.length + 1 + (enableBulkDelete ? 1 : 0)} rows={Math.min(pageSize, 8)} />}
+            {!loading && rows.map((row) => (
+              <tr key={row.id} className={`selection-row ${selectedIds.includes(row.id) ? 'is-selected' : ''}`}>
                 {enableBulkDelete && (
                   <td>
                     <input
                       type="checkbox"
+                      className="selection-checkbox"
                       aria-label="选择"
                       checked={selectedIds.includes(row.id)}
                       onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))}
@@ -179,6 +189,11 @@ export default function AdminTable<T extends { id: string }>({ title, endpoint, 
                 </td>
               </tr>
             ))}
+            {!loading && !rows.length && (
+              <tr>
+                <td colSpan={columns.length + 1 + (enableBulkDelete ? 1 : 0)} className="empty-cell">暂无数据</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

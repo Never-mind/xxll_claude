@@ -97,6 +97,7 @@ describe('QuotationService.confirm', () => {
     expect(result.quotation.status).toBe('completed');
     expect(storage.update).toHaveBeenCalledWith('quotations.xlsx', 'quotation-1', { status: 'completed' });
     expect(history.create).toHaveBeenCalledOnce();
+    expect(history.create).toHaveBeenCalledWith(expect.objectContaining({ customerPriceUsd: 12 }));
     expect(settlements.ensureForQuotation).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' }), expect.any(Array));
   });
 });

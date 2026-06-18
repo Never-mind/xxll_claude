@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet, apiWrite, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { SettlementProject, SettlementProjectPage } from '../api.js';
 
 export default function SettlementProjectList() {
@@ -11,12 +12,18 @@ export default function SettlementProjectList() {
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   async function load(nextPage = page, nextPageSize = pageSize) {
-    const result = await apiGet<SettlementProjectPage>(`/settlement-projects?keyword=${encodeURIComponent(keyword)}&page=${nextPage}&pageSize=${nextPageSize}`);
-    setRows(result.items);
-    setTotal(result.total);
+    setLoading(true);
+    try {
+      const result = await apiGet<SettlementProjectPage>(`/settlement-projects?keyword=${encodeURIComponent(keyword)}&page=${nextPage}&pageSize=${nextPageSize}`);
+      setRows(result.items);
+      setTotal(result.total);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -45,10 +52,10 @@ export default function SettlementProjectList() {
       <div className="workspace-toolbar">
         <div className="search-group">
           <input className="search-input" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索报价单号/客户" />
-          <button className="primary-action search-action" onClick={() => {
+          <button className="primary-action search-action" disabled={loading} onClick={() => {
             setPage(1);
             if (page === 1) load().catch((err) => setError(err.message));
-          }}>搜索</button>
+          }}>{loading ? '加载中' : '搜索'}</button>
         </div>
       </div>
       <FeedbackDialog message={error} onClose={() => setError('')} />
@@ -69,7 +76,8 @@ export default function SettlementProjectList() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {loading && <LoadingTableRows columns={10} rows={Math.min(pageSize, 8)} />}
+            {!loading && rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.quotationNo}</td>
                 <td>{row.customerName || '-'}</td>
@@ -86,7 +94,7 @@ export default function SettlementProjectList() {
                 </td>
               </tr>
             ))}
-            {!rows.length && (
+            {!loading && !rows.length && (
               <tr>
                 <td colSpan={10} className="empty-cell">暂无项目结算数据，报价单确认后会自动生成</td>
               </tr>
@@ -96,8 +104,8 @@ export default function SettlementProjectList() {
       </div>
       <div className="pagination-bar">
         <span>第 {page} / {totalPages} 页</span>
-        <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
-        <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>下一页</button>
+        <button type="button" disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
+        <button type="button" disabled={loading || page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>下一页</button>
         <label>
           每页
           <select value={pageSize} onChange={(event) => {

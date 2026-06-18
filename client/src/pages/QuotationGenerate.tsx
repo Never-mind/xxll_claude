@@ -340,6 +340,7 @@ export default function QuotationGenerate() {
                   <th>
                     <input
                       type="checkbox"
+                      className="selection-checkbox"
                       aria-label="全选选品"
                       checked={items.length > 0 && selectedItemIndexes.length === items.length}
                       onChange={(event) => setSelectedItemIndexes(event.target.checked ? items.map((_, index) => index) : [])}
@@ -355,10 +356,11 @@ export default function QuotationGenerate() {
                 {items.map((item, index) => {
                   const preview = previewItems[index];
                   return (
-                  <tr key={index}>
+                  <tr key={index} className={`selection-row ${selectedItemIndexes.includes(index) ? 'is-selected' : ''}`}>
                     <td>
                       <input
                         type="checkbox"
+                        className="selection-checkbox"
                         aria-label="选择选品"
                         checked={selectedItemIndexes.includes(index)}
                         onChange={(event) => toggleSelectedItemIndex(index, event.target.checked)}

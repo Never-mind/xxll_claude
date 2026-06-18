@@ -10,7 +10,7 @@ const fields: FieldConfig[] = [
   { key: 'spec', label: '规格' },
   { key: 'brand', label: '品牌' },
   { key: 'transportType', label: '运输方式', type: 'select', options: ['air', 'sea', 'none'] },
-  { key: 'customerPriceUsd', label: '客户报价(USD)', type: 'number' },
+  { key: 'customerPriceUsd', label: '客户报价单价(USD)', type: 'number' },
 ];
 
 export default function HistoryQuotationManage() {

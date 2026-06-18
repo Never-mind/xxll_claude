@@ -33,6 +33,7 @@ export default function FieldVisibilityDialog({ fields, visibleKeys, title = 'хн
             <label key={field.key}>
               <input
                 type="checkbox"
+                className="selection-checkbox"
                 checked={visibleSet.has(field.key)}
                 onChange={(event) => toggle(field.key, event.target.checked)}
               />

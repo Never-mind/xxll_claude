@@ -2,6 +2,16 @@ export type TransportType = 'air' | 'sea' | 'none';
 export type QuotationStatus = 'draft' | 'completed';
 export type PurchaseCurrency = 'CNY' | 'USD' | 'MXN';
 
+export interface LoginDto {
+  username: string;
+  password: string;
+}
+
+export interface LoginResult {
+  username: string;
+  token: string;
+}
+
 export interface Product {
   id: string;
   productCode: string;

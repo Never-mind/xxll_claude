@@ -9,6 +9,7 @@
     "dev:server": "tsx watch --tsconfig server/tsconfig.json server/main.ts",
     "dev:client": "vite --config client/vite.config.ts --host 127.0.0.1",
     "db:migrate:excel": "tsx scripts/migrate-excel-to-mysql.ts",
+    "edgeone:deploy": "edgeone-pages-mcp-fullstack --region china",
     "test": "vitest run",
     "build": "tsc -p server/tsconfig.json && vite build --config client/vite.config.ts"
   },
@@ -43,5 +44,8 @@
     "vitest": "^4.1.7",
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0"
+  },
+  "devDependencies": {
+    "edgeone-pages-mcp-fullstack": "^0.0.17"
   }
 }

@@ -145,7 +145,7 @@ export class DatabaseStorageService {
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_NAME || 'quotation',
         waitForConnections: true,
-        connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
+        connectionLimit: dbConnectionLimit(),
         decimalNumbers: true,
         dateStrings: true,
         ssl: process.env.DB_SSL === 'true' ? {} : undefined,
@@ -155,6 +155,7 @@ export class DatabaseStorageService {
   }
 
   private async ensureSchema(): Promise<void> {
+    if (process.env.DB_AUTO_MIGRATE === 'false') return;
     if (!DatabaseStorageService.schemaReady) {
       DatabaseStorageService.schemaReady = this.applySchemaUpdates();
     }
@@ -249,6 +250,10 @@ async function ensureTable(pool: Pool, table: string, createSql: string): Promis
   );
   if (Number(rows[0]?.count || 0) > 0) return;
   await pool.query(createSql);
+}
+
+function dbConnectionLimit(): number {
+  return Math.max(1, Math.min(Number(process.env.DB_CONNECTION_LIMIT || 1), 2));
 }
 
 function tableFor(fileName: string): string {

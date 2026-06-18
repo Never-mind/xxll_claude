@@ -157,7 +157,7 @@ export class QuotationService {
         spec: product?.spec,
         brand: product?.brand,
         transportType: item.transportType,
-        customerPriceUsd: item.revenueUsd,
+        customerPriceUsd: historicalCustomerQuoteUnitUsd(item),
       });
     }
   }
@@ -290,4 +290,9 @@ function convertPurchaseTotalToUsd(value: number, currency: string, quotation: P
 
 function safeDivide(value: number, divisor: number) {
   return divisor ? value / divisor : 0;
+}
+
+function historicalCustomerQuoteUnitUsd(item: QuotationItem) {
+  if (item.ddpQuoteUnitUsd !== undefined && item.ddpQuoteUnitUsd !== null) return Number(item.ddpQuoteUnitUsd || 0);
+  return safeDivide(Number(item.revenueUsd || 0), Number(item.purchaseQty || 0));
 }

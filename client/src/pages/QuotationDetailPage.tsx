@@ -60,6 +60,9 @@ export default function QuotationDetailPage() {
   const [visibleItemColumns, setVisibleItemColumns] = useState<string[]>(() => itemColumns.map(([key]) => key));
   const [showItemColumns, setShowItemColumns] = useState(false);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmedNotice, setConfirmedNotice] = useState(false);
 
   useEffect(() => {
     if (id) loadDetail().catch((error) => setMessage(error.message));
@@ -67,21 +70,51 @@ export default function QuotationDetailPage() {
 
   async function loadDetail() {
     if (!id) return;
-    setDetail(await apiGet<QuotationDetail>(`/quotations/${id}`));
+    setLoading(true);
+    setMessage('');
+    try {
+      setDetail(await apiGet<QuotationDetail>(`/quotations/${id}`));
+    } catch (error) {
+      setDetail(null);
+      setMessage((error as Error).message || '报价详情加载失败');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function confirmQuotation() {
     if (!id) return;
     if (!window.confirm('确认将该报价单状态改为已完成吗？')) return;
+    setConfirming(true);
+    setConfirmedNotice(false);
     try {
       setDetail(await apiWrite<QuotationDetail>(`/quotations/${id}/confirm`, 'POST'));
+      setConfirmedNotice(true);
       setMessage('报价单已确认');
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      setConfirming(false);
     }
   }
 
-  if (!detail) return <div className="panel">加载中...</div>;
+  if (loading) return <div className="panel">加载中...</div>;
+  if (!detail) {
+    return (
+      <section>
+        <header className="page-header">
+          <div>
+            <h1>报价详情</h1>
+            <p>无法加载当前报价单数据</p>
+          </div>
+          <Link className="button-link" to="/quotation/list">返回报价列表</Link>
+        </header>
+        <div className="alert">
+          {message || '报价详情加载失败，请确认报价单是否存在，或检查后端 API 是否正常。'}
+        </div>
+      </section>
+    );
+  }
   const { quotation, items } = detail;
   const totalQty = items.reduce((sum, item) => sum + Number(item.purchaseQty || 0), 0);
   const visibleColumns = itemColumns.filter(([key]) => visibleItemColumns.includes(key));
@@ -94,12 +127,13 @@ export default function QuotationDetailPage() {
           <p>{quotation.customerName || '未填写客户'} · {quotation.status}</p>
         </div>
         <div className="toolbar">
-          {quotation.status === 'draft' && <button type="button" onClick={confirmQuotation}>确认报价单</button>}
+          {quotation.status === 'draft' && <button type="button" disabled={confirming} onClick={confirmQuotation}>{confirming ? '确认中...' : '确认报价单'}</button>}
           <Link className="button-link primary" to={`/quotation/generate/${quotation.id}`}>修改报价</Link>
           <button onClick={() => download(`/quotations/${quotation.id}/export`)}>导出</button>
           <button onClick={() => download(`/quotations/${quotation.id}/export-formal`)}>导出报价单</button>
         </div>
       </header>
+      {confirmedNotice && <div className="alert success-alert">报价单已确认</div>}
       <FeedbackDialog message={message} onClose={() => setMessage('')} />
       <div className="metrics">
         <Metric label="总数量" value={totalQty} integerValue />

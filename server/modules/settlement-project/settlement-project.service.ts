@@ -38,7 +38,8 @@ export class SettlementProjectService {
 
   async list(page = 1, pageSize = 10, keyword = ''): Promise<PageResult<SettlementProject>> {
     await this.recalculateAllProjects();
-    const rows = await this.enrichedProjects();
+    const rows = (await this.enrichedProjects())
+      .sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''));
     const normalizedKeyword = keyword.trim().toLowerCase();
     const filtered = normalizedKeyword
       ? rows.filter((row) =>

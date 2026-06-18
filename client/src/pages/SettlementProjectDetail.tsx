@@ -36,6 +36,15 @@ const tabs = [
   ['attachments', '附件管理'],
 ] as const;
 
+type AttachmentUploadProgress = {
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  description: string;
+  percent: number;
+  status: 'uploading' | 'done';
+};
+
 export default function SettlementProjectDetailPage() {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number][0]>('detail');
@@ -86,6 +95,9 @@ export default function SettlementProjectDetailPage() {
   });
   const [attachmentDescription, setAttachmentDescription] = useState('');
   const [error, setError] = useState('');
+  const [ordering, setOrdering] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentUploadProgress, setAttachmentUploadProgress] = useState<AttachmentUploadProgress | null>(null);
 
   async function load() {
     if (!id) return;
@@ -113,6 +125,8 @@ export default function SettlementProjectDetailPage() {
 
   async function orderSelected() {
     if (!id || !selectedItems.length) return;
+    setOrdering(true);
+    setError('');
     const payload: SettlementOrderDto = {
       items: selectedItems.map((item) => ({
         itemId: item.id,
@@ -124,9 +138,15 @@ export default function SettlementProjectDetailPage() {
         invoiceNo: item.invoiceNo || '',
       })),
     };
-    const result = await apiWrite<SettlementProjectDetail>(`/settlement-projects/${id}/order`, 'POST', payload);
-    applyDetail(result);
-    setSelectedIds([]);
+    try {
+      const result = await apiWrite<SettlementProjectDetail>(`/settlement-projects/${id}/order`, 'POST', payload);
+      applyDetail(result);
+      setSelectedIds([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '下单采购失败');
+    } finally {
+      setOrdering(false);
+    }
   }
 
   async function addExpense() {
@@ -168,20 +188,46 @@ export default function SettlementProjectDetailPage() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError('附件大小不能超过 10MB');
+      return;
+    }
+    setUploadingAttachment(true);
+    setAttachmentUploadProgress({
+      fileName: file.name,
+      fileType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+      description: attachmentDescription,
+      percent: 0,
+      status: 'uploading',
+    });
+    setError('');
     try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('description', attachmentDescription);
-      const response = await fetch(`/api/settlement-projects/${id}/attachments`, {
-        method: 'POST',
-        body: form,
+      const dataUrl = await fileToDataUrl(file);
+      const [, base64 = ''] = dataUrl.split(',');
+      setAttachmentUploadProgress((current) => current ? { ...current, percent: 5 } : current);
+      const created = await apiWrite<{ attachment: { id: string } }>(`/settlement-projects/${id}/attachments`, 'POST', {
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        description: attachmentDescription,
       });
-      if (!response.ok) throw new Error(await response.text());
-      const result = await response.json() as SettlementProjectDetail;
+      const chunks = chunkString(base64, 256 * 1024);
+      for (let index = 0; index < chunks.length; index += 1) {
+        const chunk = chunks[index];
+        await apiWrite(`/settlement-projects/${id}/attachments/${created.attachment.id}/chunk`, 'PUT', { chunk });
+        const percent = chunks.length ? Math.round(((index + 1) / chunks.length) * 90) + 5 : 95;
+        setAttachmentUploadProgress((current) => current ? { ...current, percent: Math.min(percent, 95) } : current);
+      }
+      const result = await apiGet<SettlementProjectDetail>(`/settlement-projects/${id}`);
       applyDetail(result);
+      setAttachmentUploadProgress((current) => current ? { ...current, percent: 100, status: 'done' } : current);
       setAttachmentDescription('');
     } catch (err) {
       setError(err instanceof Error ? err.message : '附件上传失败');
+    } finally {
+      setUploadingAttachment(false);
+      window.setTimeout(() => setAttachmentUploadProgress(null), 3000);
     }
   }
 
@@ -366,8 +412,8 @@ export default function SettlementProjectDetailPage() {
           <div className="panel">
             <div className="section-heading">
               <h2>未采购商品</h2>
-              <button className="primary-action" type="button" disabled={!selectedIds.length} onClick={orderSelected}>
-                下单采购
+              <button className="primary-action" type="button" disabled={!selectedIds.length || ordering} onClick={orderSelected}>
+                {ordering ? '下单中...' : '下单采购'}
               </button>
             </div>
             <div className="table-wrap">
@@ -377,6 +423,7 @@ export default function SettlementProjectDetailPage() {
                     <th>
                       <input
                         type="checkbox"
+                        className="selection-checkbox"
                         aria-label="全选"
                         checked={draftItems.length > 0 && selectedIds.length === draftItems.length}
                         onChange={(event) => setSelectedIds(event.target.checked ? draftItems.map((item) => item.id) : [])}
@@ -401,10 +448,11 @@ export default function SettlementProjectDetailPage() {
                   {draftItems.map((item) => {
                     const amounts = settlementPurchaseAmounts(item, project.exchangeRateUsd, project.exchangeRateMxn);
                     return (
-                      <tr key={item.id}>
+                      <tr key={item.id} className={`selection-row ${selectedIds.includes(item.id) ? 'is-selected' : ''}`}>
                         <td>
                           <input
                             type="checkbox"
+                            className="selection-checkbox"
                             aria-label="选择"
                             checked={selectedIds.includes(item.id)}
                             onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, item.id] : current.filter((selectedId) => selectedId !== item.id))}
@@ -813,6 +861,8 @@ export default function SettlementProjectDetailPage() {
         <AttachmentManagement
           detail={detail}
           description={attachmentDescription}
+          progress={attachmentUploadProgress}
+          uploading={uploadingAttachment}
           onDescriptionChange={setAttachmentDescription}
           onUpload={uploadAttachment}
           onDelete={deleteAttachment}
@@ -1012,12 +1062,16 @@ function PaidSwitch({ checked, disabled = false, onChange }: { checked: boolean;
 function AttachmentManagement({
   detail,
   description,
+  progress,
+  uploading,
   onDescriptionChange,
   onUpload,
   onDelete,
 }: {
   detail: SettlementProjectDetail;
   description: string;
+  progress: AttachmentUploadProgress | null;
+  uploading: boolean;
   onDescriptionChange: (value: string) => void;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onDelete: (attachmentId: string) => void;
@@ -1026,9 +1080,9 @@ function AttachmentManagement({
     <div className="panel">
       <div className="section-heading">
         <h2>附件管理</h2>
-        <label className="file-action">
+        <label className={`file-action${uploading ? ' disabled' : ''}`}>
           上传附件
-          <input type="file" onChange={onUpload} />
+          <input type="file" disabled={uploading} onChange={onUpload} />
         </label>
       </div>
       <div className="inline-form-grid">
@@ -1037,6 +1091,17 @@ function AttachmentManagement({
           <input value={description} onChange={(event) => onDescriptionChange(event.target.value)} />
         </label>
       </div>
+      {progress && (
+        <div className="attachment-upload-progress">
+          <div className="attachment-upload-progress__meta">
+            <strong>{progress.fileName}</strong>
+            <span>{progress.percent}%</span>
+          </div>
+          <div className="attachment-upload-progress__bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}>
+            <span style={{ width: `${progress.percent}%` }} />
+          </div>
+        </div>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
@@ -1050,6 +1115,25 @@ function AttachmentManagement({
             </tr>
           </thead>
           <tbody>
+            {progress && (
+              <tr className={`attachment-upload-row ${progress.status === 'done' ? 'is-done' : ''}`}>
+                <td>{progress.fileName}</td>
+                <td>{progress.fileType || '-'}</td>
+                <td className="numeric-cell">{formatFileSize(progress.fileSize)}</td>
+                <td>{progress.description || '-'}</td>
+                <td>
+                  <div className="attachment-upload-row__status">
+                    <span>{progress.status === 'done' ? '上传完成，正在刷新' : '上传中'}</span>
+                    <span>{progress.percent}%</span>
+                  </div>
+                </td>
+                <td className="attachment-actions-col">
+                  <div className="attachment-upload-row__bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}>
+                    <span style={{ width: `${progress.percent}%` }} />
+                  </div>
+                </td>
+              </tr>
+            )}
             {detail.attachments.map((attachment) => (
               <tr key={attachment.id}>
                 <td>{attachment.fileName}</td>
@@ -1063,7 +1147,7 @@ function AttachmentManagement({
                 </td>
               </tr>
             ))}
-            {!detail.attachments.length && (
+            {!detail.attachments.length && !progress && (
               <tr>
                 <td colSpan={6} className="empty-cell">暂无附件</td>
               </tr>
@@ -1260,6 +1344,23 @@ function formatFileSize(value = 0) {
   if (size >= 1024 * 1024) return `${money(size / 1024 / 1024)} MB`;
   if (size >= 1024) return `${money(size / 1024)} KB`;
   return `${integer(size)} B`;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('附件读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function chunkString(value: string, size: number): string[] {
+  const chunks: string[] = [];
+  for (let index = 0; index < value.length; index += size) {
+    chunks.push(value.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function priceTypeLabel(value: string) {
