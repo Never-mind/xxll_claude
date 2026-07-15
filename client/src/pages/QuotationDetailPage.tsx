@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { apiGet, apiWrite, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
 import FieldVisibilityDialog from '../components/FieldVisibilityDialog.js';
+import LinkedNumber from '../components/LinkedNumber.js';
 import type { QuotationDetail } from '../api.js';
 
 const itemColumns = [
@@ -146,6 +147,9 @@ export default function QuotationDetailPage() {
       </div>
       <div className="panel">
         <h2>报价参数</h2>
+        {quotation.sourcePoNo && quotation.sourcePoId && (
+          <p className="form-hint">来源客户PO：<LinkedNumber to={`/customer-pos/${quotation.sourcePoId}`}>{quotation.sourcePoNo}</LinkedNumber></p>
+        )}
         <div className="detail-grid">
           {paramFields.map(([key, label]) => (
             <div className="detail-item" key={key}>

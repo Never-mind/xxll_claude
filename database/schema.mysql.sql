@@ -95,6 +95,9 @@ CREATE TABLE IF NOT EXISTS `quotations` (
   `customerId` CHAR(36) NULL,
   `customerName` VARCHAR(255) NULL,
   `remark` TEXT NULL,
+  `sourceType` VARCHAR(30) NULL,
+  `sourcePoId` CHAR(36) NULL,
+  `sourcePoNo` VARCHAR(100) NULL,
   `createdAt` VARCHAR(32) NOT NULL,
   `updatedAt` VARCHAR(32) NOT NULL,
   INDEX `idx_quotations_status` (`status`),
@@ -132,6 +135,8 @@ CREATE TABLE IF NOT EXISTS `quotation_items` (
   `badDebtProvisionUsd` DECIMAL(14,4) NOT NULL DEFAULT 0,
   `markupRate` DECIMAL(14,4) NOT NULL DEFAULT 0,
   `enableNom` TINYINT(1) NOT NULL DEFAULT 0,
+  `sourcePoItemId` CHAR(36) NULL,
+  `sourcePoLineNo` INT NOT NULL DEFAULT 0,
   `createdAt` VARCHAR(32) NOT NULL,
   `updatedAt` VARCHAR(32) NOT NULL,
   INDEX `idx_quotation_items_quotation` (`quotationId`)
@@ -249,4 +254,65 @@ CREATE TABLE IF NOT EXISTS `settlement_attachments` (
   `createdAt` VARCHAR(32) NOT NULL,
   `updatedAt` VARCHAR(32) NOT NULL,
   INDEX `idx_settlement_attachments_project` (`projectId`)
+);
+
+CREATE TABLE IF NOT EXISTS `customer_pos` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `poNo` VARCHAR(100) NOT NULL UNIQUE,
+  `customerId` CHAR(36) NOT NULL,
+  `customerName` VARCHAR(255) NOT NULL,
+  `poDate` VARCHAR(32) NOT NULL,
+  `deliveryDate` VARCHAR(32) NULL,
+  `currency` VARCHAR(10) NOT NULL DEFAULT 'USD',
+  `status` VARCHAR(20) NOT NULL DEFAULT 'draft',
+  `remark` TEXT NULL,
+  `quotationId` CHAR(36) NULL,
+  `quotationNo` VARCHAR(100) NULL,
+  `createdBy` VARCHAR(100) NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customer_pos_status` (`status`),
+  INDEX `idx_customer_pos_keyword` (`poNo`, `customerName`)
+);
+
+CREATE TABLE IF NOT EXISTS `customer_po_items` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `poId` CHAR(36) NOT NULL,
+  `lineNo` INT NOT NULL DEFAULT 1,
+  `customerSku` VARCHAR(100) NULL,
+  `customerProductName` VARCHAR(255) NOT NULL,
+  `customerSpec` VARCHAR(255) NULL,
+  `customerBrand` VARCHAR(255) NULL,
+  `unit` VARCHAR(50) NULL,
+  `quantity` DECIMAL(14,4) NOT NULL DEFAULT 0,
+  `targetUnitPrice` DECIMAL(14,4) NOT NULL DEFAULT 0,
+  `currency` VARCHAR(10) NOT NULL DEFAULT 'USD',
+  `imageUrl` TEXT NULL,
+  `remark` TEXT NULL,
+  `matchedProductId` CHAR(36) NULL,
+  `matchedProductCode` VARCHAR(100) NULL,
+  `matchedProductName` VARCHAR(255) NULL,
+  `matchStatus` VARCHAR(20) NOT NULL DEFAULT 'unmatched',
+  `matchMethod` VARCHAR(50) NULL,
+  `sourceType` VARCHAR(20) NOT NULL DEFAULT 'temporary',
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customer_po_items_po` (`poId`, `lineNo`),
+  INDEX `idx_customer_po_items_match` (`matchedProductId`)
+);
+
+CREATE TABLE IF NOT EXISTS `customer_product_aliases` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `customerId` CHAR(36) NOT NULL,
+  `customerName` VARCHAR(255) NOT NULL,
+  `customerSku` VARCHAR(100) NULL,
+  `customerProductName` VARCHAR(255) NOT NULL,
+  `customerSpec` VARCHAR(255) NULL,
+  `customerBrand` VARCHAR(255) NULL,
+  `productId` CHAR(36) NOT NULL,
+  `productCode` VARCHAR(100) NOT NULL,
+  `productName` VARCHAR(255) NOT NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customer_alias_lookup` (`customerId`, `customerSku`, `customerProductName`)
 );

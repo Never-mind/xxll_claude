@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet, apiWrite, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import LinkedNumber from '../components/LinkedNumber.js';
 import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { SettlementProject, SettlementProjectPage } from '../api.js';
 
@@ -79,7 +80,7 @@ export default function SettlementProjectList() {
             {loading && <LoadingTableRows columns={10} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.quotationNo}</td>
+                <td><LinkedNumber to={`/quotation/detail/${row.quotationId}`}>{row.quotationNo}</LinkedNumber></td>
                 <td>{row.customerName || '-'}</td>
                 <td>{row.remark || '-'}</td>
                 <td className="numeric-cell">{money(row.quotedPurchaseCostUsd)}</td>

@@ -19,6 +19,9 @@ const TABLES: Record<string, string> = {
   'settlement_sales.xlsx': 'settlement_sales',
   'settlement_invoices.xlsx': 'settlement_invoices',
   'settlement_attachments.xlsx': 'settlement_attachments',
+  'customer_pos.xlsx': 'customer_pos',
+  'customer_po_items.xlsx': 'customer_po_items',
+  'customer_product_aliases.xlsx': 'customer_product_aliases',
 };
 
 const BOOLEAN_FIELDS: Record<string, string[]> = {
@@ -221,6 +224,75 @@ export class DatabaseStorageService {
         INDEX ${quoteId('idx_settlement_attachments_project')} (${quoteId('projectId')})
       )
     `);
+    await ensureTable(this.pool(), 'customer_pos', `
+      CREATE TABLE IF NOT EXISTS ${quoteId('customer_pos')} (
+        ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+        ${quoteId('poNo')} VARCHAR(100) NOT NULL UNIQUE,
+        ${quoteId('customerId')} CHAR(36) NOT NULL,
+        ${quoteId('customerName')} VARCHAR(255) NOT NULL,
+        ${quoteId('poDate')} VARCHAR(32) NOT NULL,
+        ${quoteId('deliveryDate')} VARCHAR(32) NULL,
+        ${quoteId('currency')} VARCHAR(10) NOT NULL DEFAULT 'USD',
+        ${quoteId('status')} VARCHAR(20) NOT NULL DEFAULT 'draft',
+        ${quoteId('remark')} TEXT NULL,
+        ${quoteId('quotationId')} CHAR(36) NULL,
+        ${quoteId('quotationNo')} VARCHAR(100) NULL,
+        ${quoteId('createdBy')} VARCHAR(100) NULL,
+        ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+        ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+        INDEX ${quoteId('idx_customer_pos_status')} (${quoteId('status')}),
+        INDEX ${quoteId('idx_customer_pos_keyword')} (${quoteId('poNo')}, ${quoteId('customerName')})
+      )
+    `);
+    await ensureTable(this.pool(), 'customer_po_items', `
+      CREATE TABLE IF NOT EXISTS ${quoteId('customer_po_items')} (
+        ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+        ${quoteId('poId')} CHAR(36) NOT NULL,
+        ${quoteId('lineNo')} INT NOT NULL DEFAULT 1,
+        ${quoteId('customerSku')} VARCHAR(100) NULL,
+        ${quoteId('customerProductName')} VARCHAR(255) NOT NULL,
+        ${quoteId('customerSpec')} VARCHAR(255) NULL,
+        ${quoteId('customerBrand')} VARCHAR(255) NULL,
+        ${quoteId('unit')} VARCHAR(50) NULL,
+        ${quoteId('quantity')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('targetUnitPrice')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+        ${quoteId('currency')} VARCHAR(10) NOT NULL DEFAULT 'USD',
+        ${quoteId('imageUrl')} TEXT NULL,
+        ${quoteId('remark')} TEXT NULL,
+        ${quoteId('matchedProductId')} CHAR(36) NULL,
+        ${quoteId('matchedProductCode')} VARCHAR(100) NULL,
+        ${quoteId('matchedProductName')} VARCHAR(255) NULL,
+        ${quoteId('matchStatus')} VARCHAR(20) NOT NULL DEFAULT 'unmatched',
+        ${quoteId('matchMethod')} VARCHAR(50) NULL,
+        ${quoteId('sourceType')} VARCHAR(20) NOT NULL DEFAULT 'temporary',
+        ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+        ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+        INDEX ${quoteId('idx_customer_po_items_po')} (${quoteId('poId')}, ${quoteId('lineNo')}),
+        INDEX ${quoteId('idx_customer_po_items_match')} (${quoteId('matchedProductId')})
+      )
+    `);
+    await ensureTable(this.pool(), 'customer_product_aliases', `
+      CREATE TABLE IF NOT EXISTS ${quoteId('customer_product_aliases')} (
+        ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+        ${quoteId('customerId')} CHAR(36) NOT NULL,
+        ${quoteId('customerName')} VARCHAR(255) NOT NULL,
+        ${quoteId('customerSku')} VARCHAR(100) NULL,
+        ${quoteId('customerProductName')} VARCHAR(255) NOT NULL,
+        ${quoteId('customerSpec')} VARCHAR(255) NULL,
+        ${quoteId('customerBrand')} VARCHAR(255) NULL,
+        ${quoteId('productId')} CHAR(36) NOT NULL,
+        ${quoteId('productCode')} VARCHAR(100) NOT NULL,
+        ${quoteId('productName')} VARCHAR(255) NOT NULL,
+        ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+        ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+        INDEX ${quoteId('idx_customer_alias_lookup')} (${quoteId('customerId')}, ${quoteId('customerSku')}, ${quoteId('customerProductName')})
+      )
+    `);
+    await ensureColumn(this.pool(), 'quotations', 'sourceType', "VARCHAR(30) NULL AFTER `remark`");
+    await ensureColumn(this.pool(), 'quotations', 'sourcePoId', "CHAR(36) NULL AFTER `sourceType`");
+    await ensureColumn(this.pool(), 'quotations', 'sourcePoNo', "VARCHAR(100) NULL AFTER `sourcePoId`");
+    await ensureColumn(this.pool(), 'quotation_items', 'sourcePoItemId', "CHAR(36) NULL AFTER `enableNom`");
+    await ensureColumn(this.pool(), 'quotation_items', 'sourcePoLineNo', "INT NOT NULL DEFAULT 0 AFTER `sourcePoItemId`");
   }
 
   private async insertIntoTable(table: string, row: RowRecord, executor: Pick<Pool, 'query'> = this.pool()): Promise<void> {

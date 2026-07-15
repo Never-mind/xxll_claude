@@ -24,6 +24,32 @@ export function calculateSettlementPurchaseAmounts(input: SettlementPurchaseAmou
   };
 }
 
+export function summarizeSettlementOrderItems(
+  items: Array<Omit<SettlementPurchaseAmountInput, 'exchangeRateUsd' | 'exchangeRateMxn'>>,
+  exchangeRateUsd: number,
+  exchangeRateMxn: number,
+) {
+  return items.reduce(
+    (summary, item) => {
+      const amounts = calculateSettlementPurchaseAmounts({ ...item, exchangeRateUsd, exchangeRateMxn });
+      const currency = item.currency;
+      summary.itemCount += 1;
+      summary.purchaseQty += Math.trunc(Number(item.purchaseQty || 0));
+      summary.totalsByCurrency[currency] += amounts.purchaseTotal;
+      summary.taxExcludedUsd += amounts.taxExcludedUsd;
+      summary.taxIncludedUsd += amounts.taxIncludedUsd;
+      return summary;
+    },
+    {
+      itemCount: 0,
+      purchaseQty: 0,
+      totalsByCurrency: { CNY: 0, USD: 0, MXN: 0 } as Record<SettlementCurrency, number>,
+      taxExcludedUsd: 0,
+      taxIncludedUsd: 0,
+    },
+  );
+}
+
 function convertToUsd(amount: number, currency: SettlementCurrency, exchangeRateUsd: number, exchangeRateMxn: number): number {
   if (currency === 'USD') return amount;
   if (currency === 'MXN') return amount * Number(exchangeRateMxn || 0);

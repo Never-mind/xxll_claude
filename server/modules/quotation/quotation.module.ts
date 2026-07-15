@@ -12,5 +12,6 @@ import { QuotationService } from './quotation.service.js';
   imports: [ProductModule, CustomerModule, TariffRateModule, HistoryQuotationModule, SettlementProjectModule],
   controllers: [QuotationController],
   providers: [DatabaseStorageService, QuotationService],
+  exports: [QuotationService],
 })
 export class QuotationModule {}

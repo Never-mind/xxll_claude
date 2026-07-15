@@ -2,7 +2,8 @@ import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiGet, apiWrite, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
-import { calculateSettlementPurchaseAmounts } from './settlement-purchase-amount.js';
+import LinkedNumber from '../components/LinkedNumber.js';
+import { calculateSettlementPurchaseAmounts, summarizeSettlementOrderItems } from './settlement-purchase-amount.js';
 import type {
   CreateSettlementExpenseDto,
   CreateSettlementInvoiceDto,
@@ -51,6 +52,7 @@ export default function SettlementProjectDetailPage() {
   const [detail, setDetail] = useState<SettlementProjectDetail | null>(null);
   const [draftItems, setDraftItems] = useState<SettlementItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showSaleForm, setShowSaleForm] = useState(false);
   const [purchasedDrafts, setPurchasedDrafts] = useState<Record<string, UpdateSettlementItemDto>>({});
@@ -106,6 +108,7 @@ export default function SettlementProjectDetailPage() {
     setDraftItems(result.unpurchasedItems);
     setEditableDrafts(result);
     setSelectedIds([]);
+    setShowOrderConfirm(false);
     setShowExpenseForm(false);
     setShowSaleForm(false);
     setEditingPurchasedIds([]);
@@ -121,6 +124,10 @@ export default function SettlementProjectDetailPage() {
   const selectedItems = useMemo(
     () => draftItems.filter((item) => selectedIds.includes(item.id)),
     [draftItems, selectedIds],
+  );
+  const selectedOrderSummary = useMemo(
+    () => detail ? summarizeSettlementOrderItems(selectedItems, detail.project.exchangeRateUsd, detail.project.exchangeRateMxn) : emptyOrderSummary(),
+    [detail, selectedItems],
   );
 
   async function orderSelected() {
@@ -142,6 +149,7 @@ export default function SettlementProjectDetailPage() {
       const result = await apiWrite<SettlementProjectDetail>(`/settlement-projects/${id}/order`, 'POST', payload);
       applyDetail(result);
       setSelectedIds([]);
+      setShowOrderConfirm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : '下单采购失败');
     } finally {
@@ -380,7 +388,7 @@ export default function SettlementProjectDetailPage() {
       <header className="page-header">
         <div>
           <h1>项目结算</h1>
-          <p>{project.quotationNo} / {project.customerName || '-'}</p>
+          <p><LinkedNumber to={`/quotation/detail/${project.quotationId}`}>{project.quotationNo}</LinkedNumber> / {project.customerName || '-'}</p>
         </div>
         <div className="toolbar">
           {project.status === 'completed' ? (
@@ -412,7 +420,7 @@ export default function SettlementProjectDetailPage() {
           <div className="panel">
             <div className="section-heading">
               <h2>未采购商品</h2>
-              <button className="primary-action" type="button" disabled={!selectedIds.length || ordering} onClick={orderSelected}>
+              <button className="primary-action" type="button" disabled={!selectedIds.length || ordering} onClick={() => setShowOrderConfirm(true)}>
                 {ordering ? '下单中...' : '下单采购'}
               </button>
             </div>
@@ -868,6 +876,25 @@ export default function SettlementProjectDetailPage() {
           onDelete={deleteAttachment}
         />
       )}
+      {activeTab === 'detail' && selectedItems.length ? (
+        <OrderFloatingSummary
+          ordering={ordering}
+          summary={selectedOrderSummary}
+          onClear={() => setSelectedIds([])}
+          onConfirm={() => setShowOrderConfirm(true)}
+        />
+      ) : null}
+      {showOrderConfirm ? (
+        <OrderConfirmDialog
+          items={selectedItems}
+          ordering={ordering}
+          summary={selectedOrderSummary}
+          exchangeRateUsd={project.exchangeRateUsd}
+          exchangeRateMxn={project.exchangeRateMxn}
+          onCancel={() => setShowOrderConfirm(false)}
+          onConfirm={orderSelected}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1038,6 +1065,110 @@ function InvoiceManagement({
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+type OrderSummary = ReturnType<typeof summarizeSettlementOrderItems>;
+
+function OrderFloatingSummary({
+  ordering,
+  summary,
+  onClear,
+  onConfirm,
+}: {
+  ordering: boolean;
+  summary: OrderSummary;
+  onClear: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="order-floating-summary" role="status">
+      <div className="order-floating-metrics">
+        <span>{`\u5df2\u9009 ${summary.itemCount} \u9879`}</span>
+        <strong>{`\u603b\u6570\u91cf ${integer(summary.purchaseQty)}`}</strong>
+        <span>{formatCurrencyTotals(summary.totalsByCurrency)}</span>
+        <span>{`\u4e0d\u542b\u7a0e USD ${money(summary.taxExcludedUsd)}`}</span>
+      </div>
+      <div className="order-floating-actions">
+        <button type="button" onClick={onClear}>{"\u6e05\u7a7a\u9009\u62e9"}</button>
+        <button className="primary-action" type="button" disabled={ordering} onClick={onConfirm}>
+          {ordering ? "\u4e0b\u5355\u4e2d..." : "\u786e\u8ba4\u4e0b\u5355"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OrderConfirmDialog({
+  items,
+  ordering,
+  summary,
+  exchangeRateUsd,
+  exchangeRateMxn,
+  onCancel,
+  onConfirm,
+}: {
+  items: SettlementItem[];
+  ordering: boolean;
+  summary: OrderSummary;
+  exchangeRateUsd: number;
+  exchangeRateMxn: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal-backdrop">
+      <div className="modal order-confirm-modal">
+        <div className="modal-header">
+          <h2>{"\u786e\u8ba4\u4e0b\u5355\u91c7\u8d2d"}</h2>
+          <button className="modal-close" type="button" onClick={onCancel} aria-label={"\u5173\u95ed"}>x</button>
+        </div>
+        <div className="order-confirm-summary">
+          <div><span>{"\u5df2\u9009\u4ea7\u54c1"}</span><strong>{summary.itemCount}</strong></div>
+          <div><span>{"\u91c7\u8d2d\u603b\u6570\u91cf"}</span><strong>{integer(summary.purchaseQty)}</strong></div>
+          <div><span>{"\u91c7\u8d2d\u603b\u91d1\u989d"}</span><strong>{formatCurrencyTotals(summary.totalsByCurrency)}</strong></div>
+          <div><span>{"\u4e0d\u542b\u7a0e USD"}</span><strong>{money(summary.taxExcludedUsd)}</strong></div>
+          <div><span>{"\u542b\u7a0e USD"}</span><strong>{money(summary.taxIncludedUsd)}</strong></div>
+        </div>
+        <div className="table-wrap order-confirm-table">
+          <table>
+            <thead>
+              <tr>
+                <th>{"\u4ea7\u54c1\u7f16\u7801"}</th>
+                <th>{"\u4ea7\u54c1\u540d\u79f0"}</th>
+                <th>{"\u91c7\u8d2d\u6570\u91cf"}</th>
+                <th>{"\u91c7\u8d2d\u5355\u4ef7"}</th>
+                <th>{"\u91c7\u8d2d\u603b\u4ef7"}</th>
+                <th>{"\u5e01\u79cd"}</th>
+                <th>{"\u4e0d\u542b\u7a0eUSD"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const amounts = settlementPurchaseAmounts(item, exchangeRateUsd, exchangeRateMxn);
+                return (
+                  <tr key={item.id}>
+                    <td>{item.productCode}</td>
+                    <td>{item.productName}</td>
+                    <td className="numeric-cell">{integer(item.purchaseQty)}</td>
+                    <td className="numeric-cell">{money(item.purchaseUnitPrice)}</td>
+                    <td className="numeric-cell">{money(amounts.purchaseTotal)}</td>
+                    <td>{item.currency}</td>
+                    <td className="numeric-cell">{money(amounts.taxExcludedUsd)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel}>{"\u53d6\u6d88"}</button>
+          <button className="primary-action" type="button" disabled={ordering || !items.length} onClick={onConfirm}>
+            {ordering ? "\u4e0b\u5355\u4e2d..." : "\u786e\u8ba4\u4e0b\u5355"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1337,6 +1468,23 @@ function normalizeInvoiceDraft(draft: CreateSettlementInvoiceDto): CreateSettlem
     invoiceTaxExcludedTotal: calculated.invoiceTaxExcludedTotal,
     invoiceTaxAmount: calculated.invoiceTaxAmount,
   };
+}
+
+function emptyOrderSummary(): OrderSummary {
+  return {
+    itemCount: 0,
+    purchaseQty: 0,
+    totalsByCurrency: { CNY: 0, USD: 0, MXN: 0 },
+    taxExcludedUsd: 0,
+    taxIncludedUsd: 0,
+  };
+}
+
+function formatCurrencyTotals(totals: Record<SettlementCurrency, number>) {
+  return currencies
+    .filter((currency) => Number(totals[currency] || 0) !== 0)
+    .map((currency) => `${currency} ${money(totals[currency])}`)
+    .join(' / ') || '0.00';
 }
 
 function formatFileSize(value = 0) {

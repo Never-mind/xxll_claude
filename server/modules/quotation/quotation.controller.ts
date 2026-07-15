@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Inject, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { WriteAuthGuard } from '../../common/write-auth.guard.js';
 import type { CreateQuotationDto } from '../../../shared/api.interface.js';
@@ -10,14 +10,22 @@ export class QuotationController {
 
   @Post()
   @UseGuards(WriteAuthGuard)
-  create(@Body() body: CreateQuotationDto) {
-    return this.quotations.create(body);
+  async create(@Body() body: CreateQuotationDto) {
+    try {
+      return await this.quotations.create(body);
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
   }
 
   @Put(':id')
   @UseGuards(WriteAuthGuard)
-  update(@Param('id') id: string, @Body() body: CreateQuotationDto) {
-    return this.quotations.update(id, body);
+  async update(@Param('id') id: string, @Body() body: CreateQuotationDto) {
+    try {
+      return await this.quotations.update(id, body);
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
   }
 
   @Get()

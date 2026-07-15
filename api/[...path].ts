@@ -10,10 +10,12 @@ import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from '../server/app.module.js';
 import { calculateQuotation } from '../server/modules/quotation/quotation-calculator.js';
+import { customerPoToQuotationDraft } from '../shared/customer-po.js';
 import { formalQuotationInputFromSaved, writeFormalQuotationWorkbook } from '../shared/formal-quotation-export.js';
 
 let cachedHandler: Handler | undefined;
 let lightweightPool: mysql.Pool | undefined;
+let customerPoSchemaReady: Promise<void> | undefined;
 
 async function createHandler(): Promise<Handler> {
   const expressApp = express();
@@ -57,6 +59,20 @@ async function lightweightWriteHandler(request: IncomingMessage, response: Serve
     }
     if (url.pathname === '/api/quotations' && request.method === 'POST') {
       await sendJson(response, await saveQuotation(await readJsonBody(request)));
+      return true;
+    }
+    if (url.pathname === '/api/customer-pos' && request.method === 'POST') {
+      await sendJson(response, await saveCustomerPo(await readJsonBody(request)));
+      return true;
+    }
+    const customerPoActionMatch = url.pathname.match(/^\/api\/customer-pos\/([^/]+)\/generate-quotation$/);
+    if (customerPoActionMatch && request.method === 'POST') {
+      await sendJson(response, await generateQuotationFromCustomerPo(customerPoActionMatch[1]));
+      return true;
+    }
+    const customerPoUpdateMatch = url.pathname.match(/^\/api\/customer-pos\/([^/]+)$/);
+    if (customerPoUpdateMatch && request.method === 'PUT') {
+      await sendJson(response, await saveCustomerPo(await readJsonBody(request), customerPoUpdateMatch[1]));
       return true;
     }
     const quotationUpdateMatch = url.pathname.match(/^\/api\/quotations\/([^/]+)$/);
@@ -128,6 +144,14 @@ async function lightweightDeleteHandler(request: IncomingMessage, response: Serv
       await sendJson(response, {});
       return true;
     }
+    if (resource === 'customer-pos') {
+      await executeInTransaction([
+        ['DELETE FROM `customer_po_items` WHERE `poId` = ?', [id]],
+        ['DELETE FROM `customer_pos` WHERE `id` = ?', [id]],
+      ]);
+      await sendJson(response, {});
+      return true;
+    }
     if (resource === 'settlement-projects') {
       await executeInTransaction([
         ['DELETE FROM `settlement_items` WHERE `projectId` = ?', [id]],
@@ -159,6 +183,7 @@ async function lightweightGetHandler(request: IncomingMessage, response: ServerR
     '/api/tariff-rates': () => listTable('tariff_rates', url, ['deviceType', 'hsCode']),
     '/api/history-quotations': () => listTable('history_quotations', url, ['customerName', 'productCode', 'productName', 'brand']),
     '/api/quotations': () => listQuotations(url),
+    '/api/customer-pos': () => listCustomerPos(url),
     '/api/settlement-projects': () => listSettlementProjects(url),
     '/api/finance/invoices': () => listFinanceInvoices(url),
   };
@@ -179,6 +204,15 @@ async function lightweightGetHandler(request: IncomingMessage, response: ServerR
   if (quotationDetailMatch) {
     try {
       await sendJson(response, await getQuotationDetail(quotationDetailMatch[1]));
+    } catch (error) {
+      await sendJson(response, { message: (error as Error).message }, 500);
+    }
+    return true;
+  }
+  const customerPoDetailMatch = url.pathname.match(/^\/api\/customer-pos\/([^/]+)$/);
+  if (customerPoDetailMatch) {
+    try {
+      await sendJson(response, await getCustomerPoDetail(customerPoDetailMatch[1]));
     } catch (error) {
       await sendJson(response, { message: (error as Error).message }, 500);
     }
@@ -240,6 +274,66 @@ async function listQuotations(url: URL) {
     [...params, pageSize, (page - 1) * pageSize],
   );
   return { items: rows, total: Number(countRows[0]?.total || 0), page, pageSize };
+}
+
+async function listCustomerPos(url: URL) {
+  await ensureCustomerPoSchema();
+  const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+  const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get('pageSize') || 10)));
+  const keyword = (url.searchParams.get('keyword') || '').trim();
+  const status = (url.searchParams.get('status') || '').trim();
+  const filters: string[] = [];
+  const joinedFilters: string[] = [];
+  const params: DbParam[] = [];
+  if (keyword) {
+    const keywordFields = [
+      'poNo',
+      'customerName',
+      'remark',
+      'quotationNo',
+    ];
+    filters.push(`(${keywordFields.map((field) => `${quoteId(field)} LIKE ?`).join(' OR ')})`);
+    joinedFilters.push(`(${keywordFields.map((field) => `p.${quoteId(field)} LIKE ?`).join(' OR ')})`);
+    params.push(...Array.from({ length: 4 }, () => `%${keyword}%`));
+  }
+  if (status && status !== 'all') {
+    filters.push(`${quoteId('status')} = ?`);
+    joinedFilters.push(`p.${quoteId('status')} = ?`);
+    params.push(status);
+  }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const joinedWhere = joinedFilters.length ? `WHERE ${joinedFilters.join(' AND ')}` : '';
+  const countRows = await queryRows<{ total: number }>(`SELECT COUNT(*) AS total FROM ${quoteId('customer_pos')} ${where}`, params);
+  const rows = await queryRows<Record<string, unknown>>(
+    `SELECT p.*,
+       COUNT(i.${quoteId('id')}) AS ${quoteId('itemCount')},
+       COALESCE(SUM(i.${quoteId('quantity')}), 0) AS ${quoteId('totalQuantity')},
+       COALESCE(SUM(i.${quoteId('quantity')} * i.${quoteId('targetUnitPrice')}), 0) AS ${quoteId('totalAmount')}
+     FROM ${quoteId('customer_pos')} p
+     LEFT JOIN ${quoteId('customer_po_items')} i ON i.${quoteId('poId')} = p.${quoteId('id')}
+     ${joinedWhere}
+     GROUP BY p.${quoteId('id')}
+     ORDER BY p.${quoteId('createdAt')} DESC, p.${quoteId('id')} ASC LIMIT ? OFFSET ?`,
+    [...params, pageSize, (page - 1) * pageSize],
+  );
+  return { items: normalizeRows('customer_pos', rows), total: Number(countRows[0]?.total || 0), page, pageSize };
+}
+
+async function getCustomerPoDetail(id: string) {
+  await ensureCustomerPoSchema();
+  const po = (await queryRows<Record<string, unknown>>(
+    `SELECT * FROM ${quoteId('customer_pos')} WHERE ${quoteId('id')} = ? LIMIT 1`,
+    [id],
+  )).at(0);
+  if (!po) throw new Error(`Customer PO ${id} not found`);
+  const items = await queryRows<Record<string, unknown>>(
+    `SELECT * FROM ${quoteId('customer_po_items')} WHERE ${quoteId('poId')} = ? ORDER BY ${quoteId('lineNo')} ASC, ${quoteId('createdAt')} ASC`,
+    [id],
+  );
+  return {
+    po: normalizeRows('customer_pos', [po])[0],
+    items: normalizeRows('customer_po_items', items),
+  };
 }
 
 async function getQuotationDetail(id: string) {
@@ -355,7 +449,7 @@ async function listFinanceInvoices(url: URL) {
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const selectSql = `
-    SELECT i.*, p.\`quotationNo\`, p.\`customerName\`, p.\`remark\` AS \`projectName\`, COALESCE(p.\`status\`, 'open') AS \`projectStatus\`
+    SELECT i.*, p.\`quotationId\`, p.\`quotationNo\`, p.\`customerName\`, p.\`remark\` AS \`projectName\`, COALESCE(p.\`status\`, 'open') AS \`projectStatus\`
     FROM ${quoteId('settlement_invoices')} i
     LEFT JOIN ${quoteId('settlement_projects')} p ON p.\`id\` = i.\`projectId\`
     ${whereSql}
@@ -466,13 +560,19 @@ async function saveQuotation(payload: Record<string, unknown>, id?: string) {
     customerId: customer.id,
     customerName: customer.name,
     quotationNo,
+    sourceType: payload.sourceType || '',
+    sourcePoId: payload.sourcePoId || '',
+    sourcePoNo: payload.sourcePoNo || '',
     createdAt: existing?.quotation.createdAt || now,
     updatedAt: now,
   };
-  const items = calculated.items.map((item) => ({
+  const payloadItems = Array.isArray(payload.items) ? payload.items as Record<string, unknown>[] : [];
+  const items = calculated.items.map((item, index) => ({
     id: randomUUID(),
     quotationId,
     ...item,
+    sourcePoItemId: payloadItems[index]?.sourcePoItemId || '',
+    sourcePoLineNo: Number(payloadItems[index]?.sourcePoLineNo || 0),
     createdAt: now,
     updatedAt: now,
   }));
@@ -501,6 +601,115 @@ async function saveQuotation(payload: Record<string, unknown>, id?: string) {
   return getQuotationDetail(quotationId);
 }
 
+async function saveCustomerPo(payload: Record<string, unknown>, id?: string) {
+  await ensureCustomerPoSchema();
+  const customer = payload.customerId
+    ? (await queryRows<Record<string, unknown>>(`SELECT * FROM ${quoteId('customers')} WHERE ${quoteId('id')} = ? LIMIT 1`, [payload.customerId])).at(0)
+    : undefined;
+  if (!customer) throw new Error('请先选择系统客户');
+  const rawItems = Array.isArray(payload.items) ? payload.items as Record<string, unknown>[] : [];
+  if (!rawItems.length) throw new Error('客户 PO 至少需要一条产品明细');
+  const now = new Date().toISOString();
+  const poId = id || randomUUID();
+  const existing = id ? await getCustomerPoDetail(id) : undefined;
+  const items = await Promise.all(rawItems.map((item, index) => normalizeCustomerPoItemForSave(poId, item, index, now)));
+  const nextStatus = existing?.po.status === 'quoted'
+    ? 'quoted'
+    : items.every((item) => item.matchedProductId) ? 'matched' : 'draft';
+  const po = {
+    id: poId,
+    poNo: String(payload.poNo || '').trim() || await nextCustomerPoNo(),
+    customerId: customer.id,
+    customerName: customer.name,
+    poDate: payload.poDate || now.slice(0, 10),
+    deliveryDate: payload.deliveryDate || '',
+    currency: payload.currency || 'USD',
+    status: nextStatus,
+    remark: payload.remark || '',
+    quotationId: existing?.po.quotationId || '',
+    quotationNo: existing?.po.quotationNo || '',
+    createdBy: payload.createdBy || existing?.po.createdBy || '',
+    createdAt: existing?.po.createdAt || now,
+    updatedAt: now,
+  };
+  const connection = await lightweightDb().getConnection();
+  try {
+    await connection.beginTransaction();
+    if (id) {
+      await connection.execute(`DELETE FROM ${quoteId('customer_po_items')} WHERE ${quoteId('poId')} = ?`, [id]);
+      const entries = Object.entries(po).filter(([, value]) => value !== undefined);
+      await connection.execute(
+        `UPDATE ${quoteId('customer_pos')} SET ${entries.filter(([key]) => key !== 'id').map(([key]) => `${quoteId(key)} = ?`).join(', ')} WHERE ${quoteId('id')} = ?`,
+        [...entries.filter(([key]) => key !== 'id').map(([, value]) => toDbValue(value)), id],
+      );
+    } else {
+      await insertRow('customer_pos', po, connection);
+    }
+    for (const item of items) await insertRow('customer_po_items', item, connection);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return getCustomerPoDetail(poId);
+}
+
+async function normalizeCustomerPoItemForSave(poId: string, item: Record<string, unknown>, index: number, now: string) {
+  const matchedProductId = String(item.matchedProductId || '');
+  const matchedProduct = matchedProductId
+    ? (await queryRows<Record<string, unknown>>(`SELECT * FROM ${quoteId('products')} WHERE ${quoteId('id')} = ? LIMIT 1`, [matchedProductId])).at(0)
+    : undefined;
+  const matchedProductCode = matchedProduct ? matchedProduct.productCode : '';
+  const matchedProductName = matchedProduct ? matchedProduct.name : '';
+  return {
+    id: item.id || randomUUID(),
+    poId,
+    lineNo: Number(item.lineNo || index + 1),
+    customerSku: item.customerSku || '',
+    customerProductName: String(item.customerProductName || matchedProduct?.name || '').trim(),
+    customerSpec: item.customerSpec || '',
+    customerBrand: item.customerBrand || '',
+    unit: item.unit || matchedProduct?.unit || 'pcs',
+    quantity: Number(item.quantity || 0),
+    targetUnitPrice: Number(item.targetUnitPrice || 0),
+    currency: item.currency || 'USD',
+    imageUrl: item.imageUrl || matchedProduct?.imageUrl || '',
+    remark: item.remark || '',
+    matchedProductId,
+    matchedProductCode,
+    matchedProductName,
+    matchStatus: matchedProductId ? 'matched' : item.matchStatus || 'unmatched',
+    matchMethod: matchedProductId ? item.matchMethod || 'manual' : item.matchMethod || '',
+    sourceType: matchedProductId ? 'system' : item.sourceType || 'temporary',
+    createdAt: item.createdAt || now,
+    updatedAt: now,
+  };
+}
+
+async function generateQuotationFromCustomerPo(id: string) {
+  const detail = await getCustomerPoDetail(id);
+  const draft = customerPoToQuotationDraft(detail.po as never, detail.items as never);
+  const created = await saveQuotation(draft as never);
+  const quotationId = String(created.quotation.id || '');
+  const quotationNo = String(created.quotation.quotationNo || '');
+  await executeRows(
+    `UPDATE ${quoteId('customer_pos')} SET ${quoteId('status')} = ?, ${quoteId('quotationId')} = ?, ${quoteId('quotationNo')} = ?, ${quoteId('updatedAt')} = ? WHERE ${quoteId('id')} = ?`,
+    ['quoted', quotationId, quotationNo, new Date().toISOString(), id],
+  );
+  return { po: (await getCustomerPoDetail(id)).po, quotation: created.quotation, items: created.items };
+}
+
+async function nextCustomerPoNo() {
+  const prefix = `PO-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`;
+  const rows = await queryRows<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM ${quoteId('customer_pos')} WHERE ${quoteId('poNo')} LIKE ?`,
+    [`${prefix}%`],
+  );
+  return `${prefix}-${String(Number(rows[0]?.count || 0) + 1).padStart(3, '0')}`;
+}
+
 async function confirmQuotation(id: string) {
   const detail = await getQuotationDetail(id);
   if (detail.quotation.status !== 'completed') {
@@ -513,11 +722,12 @@ async function confirmQuotation(id: string) {
 
 async function nextQuotationNo() {
   const prefix = `QTN-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`;
-  const rows = await queryRows<{ count: number }>(
-    `SELECT COUNT(*) AS count FROM ${quoteId('quotations')} WHERE ${quoteId('quotationNo')} LIKE ?`,
+  const rows = await queryRows<{ quotationNo: string }>(
+    `SELECT ${quoteId('quotationNo')} FROM ${quoteId('quotations')} WHERE ${quoteId('quotationNo')} LIKE ?`,
     [`${prefix}%`],
   );
-  return `${prefix}-${String(Number(rows[0]?.count || 0) + 1).padStart(3, '0')}`;
+  const maxSequence = rows.reduce((max, row) => Math.max(max, Number(String(row.quotationNo || '').slice(prefix.length + 1)) || 0), 0);
+  return `${prefix}-${String(maxSequence + 1).padStart(3, '0')}`;
 }
 
 async function syncCompletedQuotation(quotation: Record<string, unknown>, items: Record<string, unknown>[]) {
@@ -847,6 +1057,103 @@ function calculateTaxExcludedAmountUsd(body: Record<string, unknown>, project: R
   if (currency === 'USD') return round(taxExcluded);
   if (currency === 'MXN') return round(taxExcluded * Number(project.exchangeRateMxn || 0));
   return round(safeDivide(taxExcluded, Number(project.exchangeRateUsd || 0)));
+}
+
+async function ensureCustomerPoSchema() {
+  if (process.env.DB_AUTO_MIGRATE === 'false') return;
+  customerPoSchemaReady ??= applyCustomerPoSchema();
+  return customerPoSchemaReady;
+}
+
+async function applyCustomerPoSchema() {
+  const pool = lightweightDb();
+  await ensureLightweightTable(pool, 'customer_pos', `
+    CREATE TABLE IF NOT EXISTS ${quoteId('customer_pos')} (
+      ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+      ${quoteId('poNo')} VARCHAR(100) NOT NULL UNIQUE,
+      ${quoteId('customerId')} CHAR(36) NOT NULL,
+      ${quoteId('customerName')} VARCHAR(255) NOT NULL,
+      ${quoteId('poDate')} VARCHAR(32) NOT NULL,
+      ${quoteId('deliveryDate')} VARCHAR(32) NULL,
+      ${quoteId('currency')} VARCHAR(10) NOT NULL DEFAULT 'USD',
+      ${quoteId('status')} VARCHAR(20) NOT NULL DEFAULT 'draft',
+      ${quoteId('remark')} TEXT NULL,
+      ${quoteId('quotationId')} CHAR(36) NULL,
+      ${quoteId('quotationNo')} VARCHAR(100) NULL,
+      ${quoteId('createdBy')} VARCHAR(100) NULL,
+      ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+      ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+      INDEX ${quoteId('idx_customer_pos_status')} (${quoteId('status')}),
+      INDEX ${quoteId('idx_customer_pos_keyword')} (${quoteId('poNo')}, ${quoteId('customerName')})
+    )
+  `);
+  await ensureLightweightTable(pool, 'customer_po_items', `
+    CREATE TABLE IF NOT EXISTS ${quoteId('customer_po_items')} (
+      ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+      ${quoteId('poId')} CHAR(36) NOT NULL,
+      ${quoteId('lineNo')} INT NOT NULL DEFAULT 1,
+      ${quoteId('customerSku')} VARCHAR(100) NULL,
+      ${quoteId('customerProductName')} VARCHAR(255) NOT NULL,
+      ${quoteId('customerSpec')} VARCHAR(255) NULL,
+      ${quoteId('customerBrand')} VARCHAR(255) NULL,
+      ${quoteId('unit')} VARCHAR(50) NULL,
+      ${quoteId('quantity')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+      ${quoteId('targetUnitPrice')} DECIMAL(14,4) NOT NULL DEFAULT 0,
+      ${quoteId('currency')} VARCHAR(10) NOT NULL DEFAULT 'USD',
+      ${quoteId('imageUrl')} TEXT NULL,
+      ${quoteId('remark')} TEXT NULL,
+      ${quoteId('matchedProductId')} CHAR(36) NULL,
+      ${quoteId('matchedProductCode')} VARCHAR(100) NULL,
+      ${quoteId('matchedProductName')} VARCHAR(255) NULL,
+      ${quoteId('matchStatus')} VARCHAR(20) NOT NULL DEFAULT 'unmatched',
+      ${quoteId('matchMethod')} VARCHAR(50) NULL,
+      ${quoteId('sourceType')} VARCHAR(20) NOT NULL DEFAULT 'temporary',
+      ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+      ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+      INDEX ${quoteId('idx_customer_po_items_po')} (${quoteId('poId')}, ${quoteId('lineNo')}),
+      INDEX ${quoteId('idx_customer_po_items_match')} (${quoteId('matchedProductId')})
+    )
+  `);
+  await ensureLightweightTable(pool, 'customer_product_aliases', `
+    CREATE TABLE IF NOT EXISTS ${quoteId('customer_product_aliases')} (
+      ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
+      ${quoteId('customerId')} CHAR(36) NOT NULL,
+      ${quoteId('customerName')} VARCHAR(255) NOT NULL,
+      ${quoteId('customerSku')} VARCHAR(100) NULL,
+      ${quoteId('customerProductName')} VARCHAR(255) NOT NULL,
+      ${quoteId('customerSpec')} VARCHAR(255) NULL,
+      ${quoteId('customerBrand')} VARCHAR(255) NULL,
+      ${quoteId('productId')} CHAR(36) NOT NULL,
+      ${quoteId('productCode')} VARCHAR(100) NOT NULL,
+      ${quoteId('productName')} VARCHAR(255) NOT NULL,
+      ${quoteId('createdAt')} VARCHAR(32) NOT NULL,
+      ${quoteId('updatedAt')} VARCHAR(32) NOT NULL,
+      INDEX ${quoteId('idx_customer_alias_lookup')} (${quoteId('customerId')}, ${quoteId('customerSku')}, ${quoteId('customerProductName')})
+    )
+  `);
+  await ensureLightweightColumn(pool, 'quotations', 'sourceType', "VARCHAR(30) NULL AFTER `remark`");
+  await ensureLightweightColumn(pool, 'quotations', 'sourcePoId', "CHAR(36) NULL AFTER `sourceType`");
+  await ensureLightweightColumn(pool, 'quotations', 'sourcePoNo', "VARCHAR(100) NULL AFTER `sourcePoId`");
+  await ensureLightweightColumn(pool, 'quotation_items', 'sourcePoItemId', "CHAR(36) NULL AFTER `enableNom`");
+  await ensureLightweightColumn(pool, 'quotation_items', 'sourcePoLineNo', "INT NOT NULL DEFAULT 0 AFTER `sourcePoItemId`");
+}
+
+async function ensureLightweightTable(pool: mysql.Pool, table: string, createSql: string) {
+  const [rows] = await pool.query<mysql.RowDataPacket[]>(
+    'SELECT COUNT(*) AS count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+    [table],
+  );
+  if (Number(rows[0]?.count || 0) > 0) return;
+  await pool.query(createSql);
+}
+
+async function ensureLightweightColumn(pool: mysql.Pool, table: string, column: string, definition: string) {
+  const [rows] = await pool.query<mysql.RowDataPacket[]>(
+    'SELECT COUNT(*) AS count FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+    [table, column],
+  );
+  if (Number(rows[0]?.count || 0) > 0) return;
+  await pool.query(`ALTER TABLE ${quoteId(table)} ADD COLUMN ${quoteId(column)} ${definition}`);
 }
 
 function sumValues(rows: Record<string, unknown>[], key: string) {

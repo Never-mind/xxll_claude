@@ -59,6 +59,7 @@ export class FinanceService {
         const project = projectById.get(invoice.projectId);
         return {
           ...invoice,
+          quotationId: project?.quotationId || '',
           quotationNo: project?.quotationNo || '',
           customerName: project?.customerName || '',
           projectName: project?.remark || '',

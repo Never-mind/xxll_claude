@@ -62,11 +62,19 @@ export class QuotationService {
       ...calculated.quotation,
       customerId: customer.id,
       customerName: customer.name,
+      sourceType: dto.sourceType || '',
+      sourcePoId: dto.sourcePoId || '',
+      sourcePoNo: dto.sourcePoNo || '',
       quotationNo: await this.nextQuotationNo(),
     });
     const items: QuotationItem[] = [];
-    for (const item of calculated.items) {
-      items.push(await this.storage.insert<QuotationItem>(ITEM_FILE, { ...item, quotationId: quotation.id }));
+    for (const [index, item] of calculated.items.entries()) {
+      items.push(await this.storage.insert<QuotationItem>(ITEM_FILE, {
+        ...item,
+        quotationId: quotation.id,
+        sourcePoItemId: dto.items[index]?.sourcePoItemId || '',
+        sourcePoLineNo: dto.items[index]?.sourcePoLineNo || 0,
+      }));
     }
     if (quotation.status === 'completed') {
       await this.syncHistory(quotation, items);
@@ -85,12 +93,20 @@ export class QuotationService {
       ...calculated.quotation,
       customerId: customer.id,
       customerName: customer.name,
+      sourceType: dto.sourceType || '',
+      sourcePoId: dto.sourcePoId || '',
+      sourcePoNo: dto.sourcePoNo || '',
       quotationNo: existing.quotation.quotationNo,
     });
     for (const item of existing.items) await this.storage.delete(ITEM_FILE, item.id);
     const items: QuotationItem[] = [];
-    for (const item of calculated.items) {
-      items.push(await this.storage.insert<QuotationItem>(ITEM_FILE, { ...item, quotationId: quotation.id }));
+    for (const [index, item] of calculated.items.entries()) {
+      items.push(await this.storage.insert<QuotationItem>(ITEM_FILE, {
+        ...item,
+        quotationId: quotation.id,
+        sourcePoItemId: dto.items[index]?.sourcePoItemId || '',
+        sourcePoLineNo: dto.items[index]?.sourcePoLineNo || 0,
+      }));
     }
     if (quotation.status === 'completed') {
       await this.syncHistory(quotation, items);
@@ -141,8 +157,10 @@ export class QuotationService {
   private async nextQuotationNo(): Promise<string> {
     const prefix = `QTN-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`;
     const rows = await this.storage.readTable<Quotation>(QUOTATION_FILE);
-    const count = rows.filter((row) => row.quotationNo?.startsWith(prefix)).length + 1;
-    return `${prefix}-${String(count).padStart(3, '0')}`;
+    const maxSequence = rows
+      .filter((row) => row.quotationNo?.startsWith(prefix))
+      .reduce((max, row) => Math.max(max, Number(row.quotationNo?.slice(prefix.length + 1)) || 0), 0);
+    return `${prefix}-${String(maxSequence + 1).padStart(3, '0')}`;
   }
 
   private async syncHistory(quotation: Quotation, items: QuotationItem[]): Promise<void> {

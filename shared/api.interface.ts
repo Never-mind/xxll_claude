@@ -1,6 +1,9 @@
 export type TransportType = 'air' | 'sea' | 'none';
 export type QuotationStatus = 'draft' | 'completed';
 export type PurchaseCurrency = 'CNY' | 'USD' | 'MXN';
+export type CustomerPoStatus = 'draft' | 'matched' | 'quoted' | 'cancelled';
+export type CustomerPoItemMatchStatus = 'unmatched' | 'matched' | 'temporary';
+export type CustomerPoItemSourceType = 'system' | 'temporary';
 
 export interface LoginDto {
   username: string;
@@ -101,6 +104,9 @@ export interface Quotation {
   customerId?: string;
   customerName?: string;
   remark?: string;
+  sourceType?: 'customer_po' | '';
+  sourcePoId?: string;
+  sourcePoNo?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +143,8 @@ export interface QuotationItem {
   markupRate: number;
   enableNom: boolean;
   historicalDdpQuoteUsd?: number | null;
+  sourcePoItemId?: string;
+  sourcePoLineNo?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -155,6 +163,8 @@ export interface CreateQuotationItemDto {
   markupRate?: number;
   ddpQuoteUnitUsd?: number;
   enableNom?: boolean;
+  sourcePoItemId?: string;
+  sourcePoLineNo?: number;
 }
 
 export interface CreateQuotationDto {
@@ -178,6 +188,9 @@ export interface CreateQuotationDto {
   customerId?: string;
   customerName?: string;
   remark?: string;
+  sourceType?: 'customer_po' | '';
+  sourcePoId?: string;
+  sourcePoNo?: string;
   items: CreateQuotationItemDto[];
 }
 
@@ -192,6 +205,106 @@ export interface QuotationDetail {
   quotation: Quotation;
   items: QuotationItem[];
 }
+
+export interface CustomerPo {
+  id: string;
+  poNo: string;
+  customerId: string;
+  customerName: string;
+  poDate: string;
+  deliveryDate?: string;
+  currency: PurchaseCurrency;
+  status: CustomerPoStatus;
+  remark?: string;
+  quotationId?: string;
+  quotationNo?: string;
+  createdBy?: string;
+  itemCount?: number;
+  totalQuantity?: number;
+  totalAmount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerPoItem {
+  id: string;
+  poId: string;
+  lineNo: number;
+  customerSku?: string;
+  customerProductName: string;
+  customerSpec?: string;
+  customerBrand?: string;
+  unit?: string;
+  quantity: number;
+  targetUnitPrice?: number;
+  currency: PurchaseCurrency;
+  imageUrl?: string;
+  remark?: string;
+  matchedProductId?: string;
+  matchedProductCode?: string;
+  matchedProductName?: string;
+  matchStatus: CustomerPoItemMatchStatus;
+  matchMethod?: string;
+  sourceType: CustomerPoItemSourceType;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerPoDetail {
+  po: CustomerPo;
+  items: CustomerPoItem[];
+}
+
+export interface CustomerProductAlias {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerSku?: string;
+  customerProductName: string;
+  customerSpec?: string;
+  customerBrand?: string;
+  productId: string;
+  productCode: string;
+  productName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCustomerPoItemDto {
+  id?: string;
+  lineNo?: number;
+  customerSku?: string;
+  customerProductName: string;
+  customerSpec?: string;
+  customerBrand?: string;
+  unit?: string;
+  quantity: number;
+  targetUnitPrice?: number;
+  currency?: PurchaseCurrency;
+  imageUrl?: string;
+  remark?: string;
+  matchedProductId?: string;
+  matchedProductCode?: string;
+  matchedProductName?: string;
+  matchStatus?: CustomerPoItemMatchStatus;
+  matchMethod?: string;
+  sourceType?: CustomerPoItemSourceType;
+}
+
+export interface CreateCustomerPoDto {
+  poNo: string;
+  customerId: string;
+  customerName?: string;
+  poDate: string;
+  deliveryDate?: string;
+  currency: PurchaseCurrency;
+  status?: CustomerPoStatus;
+  remark?: string;
+  createdBy?: string;
+  items: CreateCustomerPoItemDto[];
+}
+
+export interface UpdateCustomerPoDto extends CreateCustomerPoDto {}
 
 export type SettlementCurrency = 'CNY' | 'USD' | 'MXN';
 export type SettlementPriceType = 'tax_included' | 'tax_excluded';
@@ -378,6 +491,7 @@ export interface CreateSettlementAttachmentDto {
 }
 
 export interface FinanceInvoiceRow extends SettlementInvoice {
+  quotationId: string;
   quotationNo: string;
   customerName?: string;
   projectName?: string;

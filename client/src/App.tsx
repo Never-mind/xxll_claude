@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import ResizableTables from './components/ResizableTables.js';
 import CustomerManage from './pages/CustomerManage.js';
+import CustomerPoPage from './pages/CustomerPoPage.js';
 import DashboardStatsPage from './pages/DashboardStatsPage.js';
 import FinanceInvoicePage from './pages/FinanceInvoicePage.js';
 import HistoryQuotationManage from './pages/HistoryQuotationManage.js';
@@ -89,6 +90,7 @@ export default function App() {
               <button type="button" onClick={handleLogout}>退出</button>
             </div>
             <NavLink to="/dashboard">统计面板</NavLink>
+            <NavLink to="/customer-pos">客户PO</NavLink>
             <NavLink to="/settlement-projects">项目结算</NavLink>
             {navGroups.map((group) => (
               <div className="nav-section" key={group.title}>
@@ -115,6 +117,8 @@ export default function App() {
           <Route path="/" element={<ProductManage />} />
           <Route path="/customers" element={<CustomerManage />} />
           <Route path="/dashboard" element={<DashboardStatsPage />} />
+          <Route path="/customer-pos" element={<CustomerPoPage />} />
+          <Route path="/customer-pos/:id" element={<CustomerPoPage />} />
           <Route path="/finance" element={<FinanceInvoicePage />} />
           <Route path="/finance/invoices" element={<FinanceInvoicePage />} />
           <Route path="/tariff" element={<TariffRateManage />} />

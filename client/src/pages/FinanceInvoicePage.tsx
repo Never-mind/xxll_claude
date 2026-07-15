@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import LinkedNumber from '../components/LinkedNumber.js';
 import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { FinanceInvoicePage, FinanceInvoiceRow, SettlementInvoiceType } from '../api.js';
 
@@ -118,7 +119,7 @@ export default function FinanceInvoicePage() {
             {loading && <LoadingTableRows columns={18} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.quotationNo || '-'}</td>
+                <td>{row.quotationNo ? <LinkedNumber to={row.projectId ? `/settlement-projects/${row.projectId}` : undefined}>{row.quotationNo}</LinkedNumber> : '-'}</td>
                 <td>{row.customerName || '-'}</td>
                 <td>{row.projectName || '-'}</td>
                 <td><span className={`badge ${row.projectStatus}`}>{row.projectStatus === 'completed' ? '已完成' : '进行中'}</span></td>

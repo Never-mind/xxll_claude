@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiGet } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import LinkedNumber from '../components/LinkedNumber.js';
 import type { SettlementExpense, SettlementItem, SettlementProject, SettlementProjectDetail, SettlementProjectPage, SettlementSale } from '../api.js';
 
 interface TrendDay {
@@ -93,7 +94,7 @@ export default function DashboardStatsPage() {
             <tbody>
               {rows.slice(0, 10).map((row) => (
                 <tr key={row.id}>
-                  <td>{row.quotationNo}</td>
+                  <td><LinkedNumber to={`/quotation/detail/${row.quotationId}`}>{row.quotationNo}</LinkedNumber></td>
                   <td>{row.customerName || '-'}</td>
                   <td>{new Date(row.createdAt).toLocaleDateString()}</td>
                   <td>{number(row.quotedPurchaseCostUsd)}</td>
