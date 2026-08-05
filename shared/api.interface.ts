@@ -313,6 +313,7 @@ export type SettlementInvoiceType = 'income' | 'cost';
 
 export interface SettlementProject {
   id: string;
+  projectNo: string;
   quotationId: string;
   quotationNo: string;
   customerName?: string;
@@ -439,6 +440,7 @@ export interface SettlementInvoice {
   projectId: string;
   type: SettlementInvoiceType;
   accountPeriod?: string;
+  companyEntity?: string;
   invoiceEntity?: string;
   invoiceDate?: string;
   invoiceNo?: string;
@@ -457,6 +459,7 @@ export interface SettlementInvoice {
 export interface CreateSettlementInvoiceDto {
   type: SettlementInvoiceType;
   accountPeriod?: string;
+  companyEntity?: string;
   invoiceEntity?: string;
   invoiceDate?: string;
   invoiceNo?: string;

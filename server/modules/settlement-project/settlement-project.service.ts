@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DatabaseStorageService } from '../../common/database-storage.service.js';
 import { workbookBufferFromSheets } from '../../common/excel-utils.js';
+import { nextProjectNo } from '../../../shared/project-number.js';
 import type {
   CreateSettlementExpenseDto,
   CreateSettlementAttachmentDto,
@@ -43,7 +44,7 @@ export class SettlementProjectService {
     const normalizedKeyword = keyword.trim().toLowerCase();
     const filtered = normalizedKeyword
       ? rows.filter((row) =>
-          [row.quotationNo, row.customerName].some((value) => String(value ?? '').toLowerCase().includes(normalizedKeyword)),
+          [row.projectNo, row.quotationNo, row.customerName].some((value) => String(value ?? '').toLowerCase().includes(normalizedKeyword)),
         )
       : rows;
     const safePage = Math.max(1, Number(page) || 1);
@@ -79,13 +80,15 @@ export class SettlementProjectService {
 
   async ensureForQuotation(quotation: Quotation, quotationItems: QuotationItem[]): Promise<SettlementProject> {
     if (quotation.status !== 'completed') throw new Error('Only completed quotations can create settlement projects');
-    const existing = (await this.storage.query<SettlementProject>(PROJECT_FILE, { quotationId: quotation.id })).at(0);
+    const projects = await this.projectRowsWithNumbers();
+    const existing = projects.find((project) => project.quotationId === quotation.id);
     if (existing) {
       await this.ensureMissingItems(existing, quotationItems);
       return this.recalculate(existing.id);
     }
 
     const project = await this.storage.insert<SettlementProject>(PROJECT_FILE, {
+      projectNo: nextProjectNo(new Date().toISOString(), projects.map((item) => item.projectNo)),
       quotationId: quotation.id,
       quotationNo: quotation.quotationNo,
       customerName: quotation.customerName,
@@ -351,7 +354,7 @@ export class SettlementProjectService {
 
   private async enrichedProjects(): Promise<SettlementProject[]> {
     const [projects, quotations] = await Promise.all([
-      this.storage.readTable<SettlementProject>(PROJECT_FILE),
+      this.projectRowsWithNumbers(),
       this.storage.readTable<Quotation>(QUOTATION_FILE),
     ]);
     return projects.map((project) => ({
@@ -361,10 +364,26 @@ export class SettlementProjectService {
   }
 
   private async recalculateAllProjects(): Promise<void> {
-    const projects = await this.storage.readTable<SettlementProject>(PROJECT_FILE);
+    const projects = await this.projectRowsWithNumbers();
     for (const project of projects) {
       await this.recalculate(project.id);
     }
+  }
+
+  private async projectRowsWithNumbers(): Promise<SettlementProject[]> {
+    const projects = await this.storage.readTable<SettlementProject>(PROJECT_FILE);
+    const projectNos = projects.map((project) => project.projectNo).filter(Boolean);
+    const missingNumbers = projects
+      .filter((project) => !project.projectNo)
+      .sort((left, right) => Date.parse(left.createdAt || '') - Date.parse(right.createdAt || '') || left.id.localeCompare(right.id));
+
+    for (const project of missingNumbers) {
+      const projectNo = nextProjectNo(project.createdAt, projectNos);
+      await this.storage.update<SettlementProject>(PROJECT_FILE, project.id, { projectNo });
+      project.projectNo = projectNo;
+      projectNos.push(projectNo);
+    }
+    return projects;
   }
 
   private async createItem(projectId: string, item: QuotationItem): Promise<SettlementItem> {
@@ -513,6 +532,7 @@ function settlementInvoiceRow(invoice: SettlementInvoice) {
   return {
     类型: invoice.type === 'income' ? '收入' : '成本',
     账期: invoice.accountPeriod || '',
+    公司主体: invoice.companyEntity || '',
     发票主体: invoice.invoiceEntity || '',
     发票日期: invoice.invoiceDate || '',
     发票号: invoice.invoiceNo || '',
@@ -577,6 +597,7 @@ export function __testOnlyInvoicePatch(projectId: string, dto: CreateSettlementI
     projectId,
     type: dto.type,
     accountPeriod: dto.accountPeriod || '',
+    companyEntity: dto.companyEntity || '',
     invoiceEntity: dto.invoiceEntity || '',
     invoiceDate: dto.invoiceDate || '',
     invoiceNo: dto.invoiceNo || '',

@@ -101,6 +101,7 @@ export default function FinanceInvoicePage() {
               <th>项目状态</th>
               <th>类型</th>
               <th>账期</th>
+              <th>公司主体</th>
               <th>发票主体</th>
               <th>发票日期</th>
               <th>发票号</th>
@@ -116,7 +117,7 @@ export default function FinanceInvoicePage() {
             </tr>
           </thead>
           <tbody>
-            {loading && <LoadingTableRows columns={18} rows={Math.min(pageSize, 8)} />}
+            {loading && <LoadingTableRows columns={19} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.quotationNo ? <LinkedNumber to={row.projectId ? `/settlement-projects/${row.projectId}` : undefined}>{row.quotationNo}</LinkedNumber> : '-'}</td>
@@ -125,6 +126,7 @@ export default function FinanceInvoicePage() {
                 <td><span className={`badge ${row.projectStatus}`}>{row.projectStatus === 'completed' ? '已完成' : '进行中'}</span></td>
                 <td>{invoiceTypeLabel(row.type)}</td>
                 <td>{row.accountPeriod || '-'}</td>
+                <td>{row.companyEntity || '-'}</td>
                 <td>{row.invoiceEntity || '-'}</td>
                 <td>{formatDate(row.invoiceDate)}</td>
                 <td>{row.invoiceNo || '-'}</td>
@@ -143,7 +145,7 @@ export default function FinanceInvoicePage() {
             ))}
             {!loading && !rows.length && (
               <tr>
-                <td colSpan={18} className="empty-cell">暂无发票明细</td>
+                <td colSpan={19} className="empty-cell">暂无发票明细</td>
               </tr>
             )}
           </tbody>

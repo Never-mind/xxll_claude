@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS `quotation_items` (
 
 CREATE TABLE IF NOT EXISTS `settlement_projects` (
   `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `projectNo` VARCHAR(100) NULL UNIQUE,
   `quotationId` CHAR(36) NOT NULL UNIQUE,
   `quotationNo` VARCHAR(100) NOT NULL,
   `customerName` VARCHAR(255) NULL,
@@ -226,6 +227,7 @@ CREATE TABLE IF NOT EXISTS `settlement_invoices` (
   `projectId` CHAR(36) NOT NULL,
   `type` VARCHAR(20) NOT NULL DEFAULT 'cost',
   `accountPeriod` VARCHAR(100) NULL,
+  `companyEntity` VARCHAR(255) NULL,
   `invoiceEntity` VARCHAR(255) NULL,
   `invoiceDate` VARCHAR(32) NULL,
   `invoiceNo` VARCHAR(100) NULL,

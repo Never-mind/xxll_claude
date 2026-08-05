@@ -32,7 +32,7 @@ export default function SettlementProjectList() {
   }, [page, pageSize]);
 
   async function remove(id: string) {
-    if (!confirm('确认删除该项目结算？删除后将同步删除该项目的采购商品、其他成本费用和销售收入明细。')) return;
+    if (!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u9879\u76ee\u7ed3\u7b97\uff1f\u5220\u9664\u540e\u5c06\u540c\u6b65\u5220\u9664\u8be5\u9879\u76ee\u7684\u91c7\u8d2d\u5546\u54c1\u3001\u5176\u4ed6\u6210\u672c\u8d39\u7528\u548c\u9500\u552e\u6536\u5165\u660e\u7ec6\u3002')) return;
     try {
       await apiWrite(`/settlement-projects/${id}`, 'DELETE');
       await load();
@@ -45,18 +45,18 @@ export default function SettlementProjectList() {
     <section>
       <header className="page-header">
         <div>
-          <h1>项目结算</h1>
-          <p>{total} 个项目</p>
+          <h1>{'\u9879\u76ee\u7ed3\u7b97'}</h1>
+          <p>{total} {'\u4e2a\u9879\u76ee'}</p>
         </div>
-        <button type="button" onClick={() => download('/settlement-projects/export')}>导出</button>
+        <button type="button" onClick={() => download('/settlement-projects/export')}>{'\u5bfc\u51fa'}</button>
       </header>
       <div className="workspace-toolbar">
         <div className="search-group">
-          <input className="search-input" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索报价单号/客户" />
+          <input className="search-input" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={'\u641c\u7d22\u9879\u76ee\u5355\u53f7/\u62a5\u4ef7\u5355\u53f7/\u5ba2\u6237'} />
           <button className="primary-action search-action" disabled={loading} onClick={() => {
             setPage(1);
             if (page === 1) load().catch((err) => setError(err.message));
-          }}>{loading ? '加载中' : '搜索'}</button>
+          }}>{loading ? '\u52a0\u8f7d\u4e2d...' : '\u641c\u7d22'}</button>
         </div>
       </div>
       <FeedbackDialog message={error} onClose={() => setError('')} />
@@ -64,22 +64,24 @@ export default function SettlementProjectList() {
         <table>
           <thead>
             <tr>
-              <th>报价单号</th>
-              <th>客户</th>
-              <th>项目名称</th>
-              <th>采购成本(USD)</th>
-              <th>已采购成本(USD)</th>
-              <th>销售收入(USD)</th>
-              <th>已销售收入(USD)</th>
-              <th>项目毛利(USD)</th>
-              <th>状态</th>
-              <th className="actions">操作</th>
+              <th>{'\u9879\u76ee\u5355\u53f7'}</th>
+              <th>{'\u62a5\u4ef7\u5355\u53f7'}</th>
+              <th>{'\u5ba2\u6237'}</th>
+              <th>{'\u9879\u76ee\u540d\u79f0'}</th>
+              <th>{'\u62a5\u4ef7\u91c7\u8d2d\u6210\u672c(USD)'}</th>
+              <th>{'\u5df2\u91c7\u8d2d\u6210\u672c(USD)'}</th>
+              <th>{'\u62a5\u4ef7\u9500\u552e\u6536\u5165(USD)'}</th>
+              <th>{'\u5df2\u9500\u552e\u6536\u5165(USD)'}</th>
+              <th>{'\u9879\u76ee\u6bdb\u5229(USD)'}</th>
+              <th>{'\u72b6\u6001'}</th>
+              <th className="actions">{'\u64cd\u4f5c'}</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <LoadingTableRows columns={10} rows={Math.min(pageSize, 8)} />}
+            {loading && <LoadingTableRows columns={11} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id}>
+                <td><LinkedNumber to={`/settlement-projects/${row.id}`}>{row.projectNo}</LinkedNumber></td>
                 <td><LinkedNumber to={`/quotation/detail/${row.quotationId}`}>{row.quotationNo}</LinkedNumber></td>
                 <td>{row.customerName || '-'}</td>
                 <td>{row.remark || '-'}</td>
@@ -88,27 +90,27 @@ export default function SettlementProjectList() {
                 <td className="numeric-cell">{money(row.quotedSalesRevenueUsd)}</td>
                 <td className="numeric-cell">{money(row.receivedRevenueUsd)}</td>
                 <td className="numeric-cell">{money(row.grossProfitUsd)}</td>
-                <td><span className={`badge ${row.status}`}>{row.status === 'completed' ? '已完成' : '进行中'}</span></td>
+                <td><span className={`badge ${row.status}`}>{row.status === 'completed' ? '\u5df2\u5b8c\u6210' : '\u8fdb\u884c\u4e2d'}</span></td>
                 <td className="actions">
-                  <Link to={`/settlement-projects/${row.id}`}>查看</Link>
-                  <button className="danger-action" type="button" onClick={() => remove(row.id)}>删除</button>
+                  <Link to={`/settlement-projects/${row.id}`}>{'\u67e5\u770b'}</Link>
+                  <button className="danger-action" type="button" onClick={() => remove(row.id)}>{'\u5220\u9664'}</button>
                 </td>
               </tr>
             ))}
             {!loading && !rows.length && (
               <tr>
-                <td colSpan={10} className="empty-cell">暂无项目结算数据，报价单确认后会自动生成</td>
+                <td colSpan={11} className="empty-cell">{'\u6682\u65e0\u9879\u76ee\u7ed3\u7b97\u6570\u636e\uff0c\u62a5\u4ef7\u5355\u786e\u8ba4\u540e\u4f1a\u81ea\u52a8\u751f\u6210\u3002'}</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
       <div className="pagination-bar">
-        <span>第 {page} / {totalPages} 页</span>
-        <button type="button" disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
-        <button type="button" disabled={loading || page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>下一页</button>
+        <span>{'\u7b2c'} {page} / {totalPages} {'\u9875'}</span>
+        <button type="button" disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>{'\u4e0a\u4e00\u9875'}</button>
+        <button type="button" disabled={loading || page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>{'\u4e0b\u4e00\u9875'}</button>
         <label>
-          每页
+          {'\u6bcf\u9875'}
           <select value={pageSize} onChange={(event) => {
             setPageSize(Number(event.target.value));
             setPage(1);

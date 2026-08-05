@@ -84,6 +84,7 @@ export default function SettlementProjectDetailPage() {
   const [invoiceDraft, setInvoiceDraft] = useState<CreateSettlementInvoiceDto>({
     type: 'cost',
     accountPeriod: '',
+    companyEntity: '',
     invoiceEntity: '',
     invoiceDate: '',
     invoiceNo: '',
@@ -180,6 +181,7 @@ export default function SettlementProjectDetailPage() {
     setInvoiceDraft({
       ...invoiceDraft,
       accountPeriod: '',
+      companyEntity: '',
       invoiceEntity: '',
       invoiceDate: '',
       invoiceNo: '',
@@ -388,7 +390,7 @@ export default function SettlementProjectDetailPage() {
       <header className="page-header">
         <div>
           <h1>项目结算</h1>
-          <p><LinkedNumber to={`/quotation/detail/${project.quotationId}`}>{project.quotationNo}</LinkedNumber> / {project.customerName || '-'}</p>
+            <p><strong className="project-number">{project.projectNo}</strong>{' / '}<LinkedNumber to={`/quotation/detail/${project.quotationId}`}>{project.quotationNo}</LinkedNumber>{' / '}{project.customerName || '-'}</p>
         </div>
         <div className="toolbar">
           {project.status === 'completed' ? (
@@ -944,6 +946,10 @@ function InvoiceManagement({
           <input type="date" value={draft.accountPeriod || ''} onChange={(event) => onDraftChange({ ...draft, accountPeriod: event.target.value })} />
         </label>
         <label>
+          <span>公司主体</span>
+          <input value={draft.companyEntity || ''} onChange={(event) => onDraftChange({ ...draft, companyEntity: event.target.value })} />
+        </label>
+        <label>
           <span>发票主体</span>
           <input value={draft.invoiceEntity || ''} onChange={(event) => onDraftChange({ ...draft, invoiceEntity: event.target.value })} />
         </label>
@@ -996,6 +1002,7 @@ function InvoiceManagement({
             <tr>
               <th className="invoice-type-col">类型</th>
               <th>账期</th>
+              <th>公司主体</th>
               <th>发票主体</th>
               <th>发票日期</th>
               <th>发票号</th>
@@ -1024,6 +1031,7 @@ function InvoiceManagement({
                     </select>
                   ) : invoiceTypeLabel(invoice.type)}</td>
                   <td>{isEditing ? <input type="date" value={rowDraft.accountPeriod || ''} onChange={(event) => onRowDraftChange(invoice.id, { accountPeriod: event.target.value })} /> : invoice.accountPeriod || '-'}</td>
+                  <td>{isEditing ? <input value={rowDraft.companyEntity || ''} onChange={(event) => onRowDraftChange(invoice.id, { companyEntity: event.target.value })} /> : invoice.companyEntity || '-'}</td>
                   <td>{isEditing ? <input value={rowDraft.invoiceEntity || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceEntity: event.target.value })} /> : invoice.invoiceEntity || '-'}</td>
                   <td>{isEditing ? <input type="date" value={rowDraft.invoiceDate || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceDate: event.target.value })} /> : invoice.invoiceDate || '-'}</td>
                   <td>{isEditing ? <input value={rowDraft.invoiceNo || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceNo: event.target.value })} /> : invoice.invoiceNo || '-'}</td>
@@ -1417,6 +1425,7 @@ function settlementSaleDraft(sale: {
 function settlementInvoiceDraft(invoice: {
   type: SettlementInvoiceType;
   accountPeriod?: string;
+  companyEntity?: string;
   invoiceEntity?: string;
   invoiceDate?: string;
   invoiceNo?: string;
@@ -1431,6 +1440,7 @@ function settlementInvoiceDraft(invoice: {
   return {
     type: invoice.type,
     accountPeriod: invoice.accountPeriod || '',
+    companyEntity: invoice.companyEntity || '',
     invoiceEntity: invoice.invoiceEntity || '',
     invoiceDate: invoice.invoiceDate || '',
     invoiceNo: invoice.invoiceNo || '',

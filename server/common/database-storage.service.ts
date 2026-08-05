@@ -173,6 +173,7 @@ export class DatabaseStorageService {
     await ensureColumn(this.pool(), 'quotation_items', 'purchaseTotalOriginal', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `purchaseUnitPrice`');
     await ensureColumn(this.pool(), 'quotation_items', 'purchaseTotalUsd', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `purchaseTotalOriginal`');
     await ensureColumn(this.pool(), 'quotation_items', 'firstMileFreightUsd', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `isCustomsClearance`');
+    await ensureColumn(this.pool(), 'settlement_projects', 'projectNo', 'VARCHAR(100) NULL AFTER `id`');
     await ensureColumn(this.pool(), 'settlement_items', 'brand', 'VARCHAR(255) NULL AFTER `productName`');
     await ensureColumn(this.pool(), 'settlement_items', 'invoiceNo', 'VARCHAR(100) NULL AFTER `receivedRevenueUsd`');
     await ensureColumn(this.pool(), 'settlement_items', 'invoiceEntity', 'VARCHAR(255) NULL AFTER `receivedRevenueUsd`');
@@ -187,12 +188,14 @@ export class DatabaseStorageService {
     await ensureColumn(this.pool(), 'settlement_sales', 'invoiceDate', 'VARCHAR(32) NULL AFTER `invoiceEntity`');
     await ensureColumn(this.pool(), 'settlement_sales', 'invoiceExchangeRate', 'DECIMAL(14,4) NOT NULL DEFAULT 0 AFTER `invoiceDate`');
     await ensureColumn(this.pool(), 'settlement_invoices', 'isPaid', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER `usdAmount`');
+    await ensureColumn(this.pool(), 'settlement_invoices', 'companyEntity', 'VARCHAR(255) NULL AFTER `accountPeriod`');
     await ensureTable(this.pool(), 'settlement_invoices', `
       CREATE TABLE IF NOT EXISTS ${quoteId('settlement_invoices')} (
         ${quoteId('id')} CHAR(36) NOT NULL PRIMARY KEY,
         ${quoteId('projectId')} CHAR(36) NOT NULL,
         ${quoteId('type')} VARCHAR(20) NOT NULL DEFAULT 'cost',
         ${quoteId('accountPeriod')} VARCHAR(100) NULL,
+        ${quoteId('companyEntity')} VARCHAR(255) NULL,
         ${quoteId('invoiceEntity')} VARCHAR(255) NULL,
         ${quoteId('invoiceDate')} VARCHAR(32) NULL,
         ${quoteId('invoiceNo')} VARCHAR(100) NULL,

@@ -6,6 +6,7 @@ import { FinanceService } from './finance.service.js';
 const projects: SettlementProject[] = [
   {
     id: 'project-1',
+    projectNo: 'PJ-20260601-001',
     quotationId: 'quotation-1',
     quotationNo: 'Q-001',
     customerName: '客户A',

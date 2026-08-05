@@ -12,10 +12,12 @@ import { AppModule } from '../server/app.module.js';
 import { calculateQuotation } from '../server/modules/quotation/quotation-calculator.js';
 import { customerPoToQuotationDraft } from '../shared/customer-po.js';
 import { formalQuotationInputFromSaved, writeFormalQuotationWorkbook } from '../shared/formal-quotation-export.js';
+import { nextProjectNo } from '../shared/project-number.js';
 
 let cachedHandler: Handler | undefined;
 let lightweightPool: mysql.Pool | undefined;
 let customerPoSchemaReady: Promise<void> | undefined;
+let settlementProjectSchemaReady: Promise<void> | undefined;
 
 async function createHandler(): Promise<Handler> {
   const expressApp = express();
@@ -365,11 +367,12 @@ async function exportFormalQuotation(id: string) {
 }
 
 async function listSettlementProjects(url: URL) {
+  await ensureSettlementProjectSchema();
   const page = Math.max(1, Number(url.searchParams.get('page') || 1));
   const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get('pageSize') || 10)));
   const keyword = (url.searchParams.get('keyword') || '').trim();
-  const where = keyword ? 'WHERE `quotationNo` LIKE ? OR `customerName` LIKE ? OR `remark` LIKE ?' : '';
-  const params = keyword ? [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`] : [];
+  const where = keyword ? 'WHERE `projectNo` LIKE ? OR `quotationNo` LIKE ? OR `customerName` LIKE ? OR `remark` LIKE ?' : '';
+  const params = keyword ? [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`] : [];
   const countRows = await queryRows<{ total: number }>(`SELECT COUNT(*) AS total FROM ${quoteId('settlement_projects')} ${where}`, params);
   const rows = await queryRows(
     `SELECT * FROM ${quoteId('settlement_projects')} ${where} ORDER BY ${quoteId('createdAt')} DESC, ${quoteId('id')} ASC LIMIT ? OFFSET ?`,
@@ -379,6 +382,7 @@ async function listSettlementProjects(url: URL) {
 }
 
 async function getSettlementProjectDetail(id: string) {
+  await ensureSettlementProjectSchema();
   const project = (await queryRows<Record<string, unknown>>(
     `SELECT * FROM ${quoteId('settlement_projects')} WHERE ${quoteId('id')} = ? LIMIT 1`,
     [id],
@@ -416,6 +420,7 @@ async function getSettlementProjectDetail(id: string) {
 }
 
 async function listFinanceInvoices(url: URL) {
+  await ensureSettlementProjectSchema();
   const page = Math.max(1, Number(url.searchParams.get('page') || 1));
   const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get('pageSize') || 10)));
   const keyword = (url.searchParams.get('keyword') || '').trim();
@@ -438,18 +443,20 @@ async function listFinanceInvoices(url: URL) {
   }
   if (keyword) {
     where.push(`(
-      p.\`quotationNo\` LIKE ?
+      p.\`projectNo\` LIKE ?
+      OR p.\`quotationNo\` LIKE ?
       OR p.\`customerName\` LIKE ?
       OR p.\`remark\` LIKE ?
+      OR i.\`companyEntity\` LIKE ?
       OR i.\`invoiceEntity\` LIKE ?
       OR i.\`invoiceNo\` LIKE ?
       OR i.\`accountPeriod\` LIKE ?
     )`);
-    params.push(...Array(6).fill(`%${keyword}%`) as string[]);
+    params.push(...Array(8).fill(`%${keyword}%`) as string[]);
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const selectSql = `
-    SELECT i.*, p.\`quotationId\`, p.\`quotationNo\`, p.\`customerName\`, p.\`remark\` AS \`projectName\`, COALESCE(p.\`status\`, 'open') AS \`projectStatus\`
+    SELECT i.*, p.\`projectNo\`, p.\`quotationId\`, p.\`quotationNo\`, p.\`customerName\`, p.\`remark\` AS \`projectName\`, COALESCE(p.\`status\`, 'open') AS \`projectStatus\`
     FROM ${quoteId('settlement_invoices')} i
     LEFT JOIN ${quoteId('settlement_projects')} p ON p.\`id\` = i.\`projectId\`
     ${whereSql}
@@ -732,6 +739,7 @@ async function nextQuotationNo() {
 
 async function syncCompletedQuotation(quotation: Record<string, unknown>, items: Record<string, unknown>[]) {
   if (quotation.status !== 'completed') return;
+  await ensureSettlementProjectSchema();
   const now = new Date().toISOString();
   const existingProject = (await queryRows<Record<string, unknown>>(
     `SELECT * FROM ${quoteId('settlement_projects')} WHERE ${quoteId('quotationId')} = ? LIMIT 1`,
@@ -739,6 +747,7 @@ async function syncCompletedQuotation(quotation: Record<string, unknown>, items:
   )).at(0);
   const project = existingProject || {
     id: randomUUID(),
+    projectNo: nextProjectNo(now, (await queryRows<{ projectNo: string }>(`SELECT ${quoteId('projectNo')} FROM ${quoteId('settlement_projects')}`)).map((row) => row.projectNo)),
     quotationId: quotation.id,
     quotationNo: quotation.quotationNo,
     customerName: quotation.customerName || '',
@@ -1035,6 +1044,7 @@ function invoicePatch(projectId: string, body: Record<string, unknown>) {
     projectId,
     type: body.type || 'cost',
     accountPeriod: body.accountPeriod || '',
+    companyEntity: body.companyEntity || '',
     invoiceEntity: body.invoiceEntity || '',
     invoiceDate: body.invoiceDate || '',
     invoiceNo: body.invoiceNo || '',
@@ -1063,6 +1073,27 @@ async function ensureCustomerPoSchema() {
   if (process.env.DB_AUTO_MIGRATE === 'false') return;
   customerPoSchemaReady ??= applyCustomerPoSchema();
   return customerPoSchemaReady;
+}
+
+async function ensureSettlementProjectSchema() {
+  if (process.env.DB_AUTO_MIGRATE === 'false') return;
+  settlementProjectSchemaReady ??= applySettlementProjectSchema();
+  return settlementProjectSchemaReady;
+}
+
+async function applySettlementProjectSchema() {
+  const pool = lightweightDb();
+  await ensureLightweightColumn(pool, 'settlement_projects', 'projectNo', 'VARCHAR(100) NULL AFTER `id`');
+  await ensureLightweightColumn(pool, 'settlement_invoices', 'companyEntity', 'VARCHAR(255) NULL AFTER `accountPeriod`');
+  const projects = await queryRows<{ id: string; projectNo?: string; createdAt: string }>(
+    `SELECT ${quoteId('id')}, ${quoteId('projectNo')}, ${quoteId('createdAt')} FROM ${quoteId('settlement_projects')} ORDER BY ${quoteId('createdAt')} ASC, ${quoteId('id')} ASC`,
+  );
+  const projectNos = projects.map((project) => project.projectNo || '').filter(Boolean);
+  for (const project of projects.filter((item) => !item.projectNo)) {
+    const projectNo = nextProjectNo(project.createdAt, projectNos);
+    await executeRows(`UPDATE ${quoteId('settlement_projects')} SET ${quoteId('projectNo')} = ? WHERE ${quoteId('id')} = ?`, [projectNo, project.id]);
+    projectNos.push(projectNo);
+  }
 }
 
 async function applyCustomerPoSchema() {
@@ -1401,6 +1432,7 @@ function normalizeFinanceInvoiceRows(rows: Record<string, unknown>[]) {
     normalized.isPaid = Boolean(normalized.isPaid);
     normalized.projectName = normalized.projectName || '';
     normalized.projectStatus = normalized.projectStatus || 'open';
+    normalized.companyEntity = normalized.companyEntity || '';
     normalized.quotationNo = normalized.quotationNo || '';
     normalized.customerName = normalized.customerName || '';
     return normalized;

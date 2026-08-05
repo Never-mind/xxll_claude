@@ -25,24 +25,25 @@ export class FinanceService {
   async exportInvoices(keyword = '', type = '', accountPeriodStart = '', accountPeriodEnd = ''): Promise<Buffer> {
     const rows = await this.filteredInvoices(keyword, type, accountPeriodStart, accountPeriodEnd);
     return workbookBufferFromSheets({
-      发票明细: rows.map((row) => ({
-        报价单号: row.quotationNo,
-        客户: row.customerName,
-        项目名称: row.projectName,
-        项目状态: row.projectStatus === 'completed' ? '已完成' : '进行中',
-        类型: invoiceTypeLabel(row.type),
-        账期: row.accountPeriod || '',
-        发票主体: row.invoiceEntity || '',
-        发票日期: row.invoiceDate || '',
-        发票号: row.invoiceNo || '',
-        发票总额: row.invoiceTotal,
-        发票不含税总额: row.invoiceTaxExcludedTotal,
+      '发票明细': rows.map((row) => ({
+        '报价单号': row.quotationNo,
+        '客户': row.customerName,
+        '项目名称': row.projectName,
+        '项目状态': row.projectStatus === 'completed' ? '已完成' : '进行中',
+        '类型': invoiceTypeLabel(row.type),
+        '账期': row.accountPeriod || '',
+        '公司主体': row.companyEntity || '',
+        '发票主体': row.invoiceEntity || '',
+        '发票日期': row.invoiceDate || '',
+        '发票号': row.invoiceNo || '',
+        '发票总额': row.invoiceTotal,
+        '发票不含税总额': row.invoiceTaxExcludedTotal,
         '税率(%)': row.taxRate,
-        发票税金: row.invoiceTaxAmount,
-        发票币种: row.currency,
-        发票汇率: row.exchangeRate,
-        美金金额: row.usdAmount,
-        是否支付: row.isPaid ? '是' : '否',
+        '发票税金': row.invoiceTaxAmount,
+        '发票币种': row.currency,
+        '发票汇率': row.exchangeRate,
+        '美金金额': row.usdAmount,
+        '是否支付': row.isPaid ? '是' : '否',
       })),
     });
   }
@@ -54,7 +55,7 @@ export class FinanceService {
     ]);
     const projectById = new Map(projects.map((project) => [project.id, project]));
     const normalizedKeyword = keyword.trim().toLowerCase();
-    const rows = invoices
+    return invoices
       .map((invoice) => {
         const project = projectById.get(invoice.projectId);
         return {
@@ -72,12 +73,12 @@ export class FinanceService {
         row.quotationNo,
         row.customerName,
         row.projectName,
+        row.companyEntity,
         row.invoiceEntity,
         row.invoiceNo,
         row.accountPeriod,
       ].some((value) => String(value ?? '').toLowerCase().includes(normalizedKeyword)))
       .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
-    return rows;
   }
 }
 
@@ -88,5 +89,5 @@ function inAccountPeriodRange(value: string, start: string, end: string): boolea
 }
 
 function invoiceTypeLabel(type: string) {
-  return type === 'income' ? '收入' : '成本';
+  return type === 'income' ? 'income' : 'cost';
 }
