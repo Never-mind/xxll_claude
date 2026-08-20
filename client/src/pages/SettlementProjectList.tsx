@@ -5,6 +5,7 @@ import FeedbackDialog from '../components/FeedbackDialog.js';
 import LinkedNumber from '../components/LinkedNumber.js';
 import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { SettlementProject, SettlementProjectPage } from '../api.js';
+import { formatMoney } from '../utils/display.js';
 
 export default function SettlementProjectList() {
   const [rows, setRows] = useState<SettlementProject[]>([]);
@@ -67,6 +68,7 @@ export default function SettlementProjectList() {
               <th>{'\u9879\u76ee\u5355\u53f7'}</th>
               <th>{'\u62a5\u4ef7\u5355\u53f7'}</th>
               <th>{'\u5ba2\u6237'}</th>
+              <th>承接单位</th>
               <th>{'\u9879\u76ee\u540d\u79f0'}</th>
               <th>{'\u62a5\u4ef7\u91c7\u8d2d\u6210\u672c(USD)'}</th>
               <th>{'\u5df2\u91c7\u8d2d\u6210\u672c(USD)'}</th>
@@ -78,12 +80,13 @@ export default function SettlementProjectList() {
             </tr>
           </thead>
           <tbody>
-            {loading && <LoadingTableRows columns={11} rows={Math.min(pageSize, 8)} />}
+            {loading && <LoadingTableRows columns={12} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id}>
                 <td><LinkedNumber to={`/settlement-projects/${row.id}`}>{row.projectNo}</LinkedNumber></td>
                 <td><LinkedNumber to={`/quotation/detail/${row.quotationId}`}>{row.quotationNo}</LinkedNumber></td>
                 <td>{row.customerName || '-'}</td>
+                <td>{row.contractingEntityName || '未设置'}</td>
                 <td>{row.remark || '-'}</td>
                 <td className="numeric-cell">{money(row.quotedPurchaseCostUsd)}</td>
                 <td className="numeric-cell">{money(row.purchasedCostUsd)}</td>
@@ -99,7 +102,7 @@ export default function SettlementProjectList() {
             ))}
             {!loading && !rows.length && (
               <tr>
-                <td colSpan={11} className="empty-cell">{'\u6682\u65e0\u9879\u76ee\u7ed3\u7b97\u6570\u636e\uff0c\u62a5\u4ef7\u5355\u786e\u8ba4\u540e\u4f1a\u81ea\u52a8\u751f\u6210\u3002'}</td>
+                <td colSpan={12} className="empty-cell">{'\u6682\u65e0\u9879\u76ee\u7ed3\u7b97\u6570\u636e\uff0c\u62a5\u4ef7\u5355\u786e\u8ba4\u540e\u4f1a\u81ea\u52a8\u751f\u6210\u3002'}</td>
               </tr>
             )}
           </tbody>
@@ -124,5 +127,5 @@ export default function SettlementProjectList() {
 }
 
 function money(value = 0) {
-  return Number(value || 0).toFixed(2);
+  return formatMoney(value);
 }

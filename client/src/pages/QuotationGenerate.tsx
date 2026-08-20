@@ -3,11 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { apiGet, apiWrite } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import DetailBackButton from '../components/DetailBackButton.js';
 import FieldVisibilityDialog from '../components/FieldVisibilityDialog.js';
 import { findHistoricalDdpQuoteUsd } from './quotation-history.js';
-import type { CreateQuotationDto, Customer, CustomerPage, HistoryPage, HistoryQuotation, Product, ProductPage, QuotationDetail, TariffPage, TariffRate } from '../api.js';
+import type { ContractingEntity, ContractingEntityPage, CreateQuotationDto, Customer, CustomerPage, HistoryPage, HistoryQuotation, Product, ProductPage, QuotationDetail, TariffPage, TariffRate } from '../api.js';
 import type { CreateQuotationItemDto } from '../../../shared/api.interface.js';
 import { writeFormalQuotationWorkbook } from '../../../shared/formal-quotation-export.js';
+import { formatMoney } from '../utils/display.js';
 
 const defaultParams = {
   exchangeRateUsd: 6.82,
@@ -65,6 +67,8 @@ export default function QuotationGenerate() {
   const { id } = useParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [contractingEntities, setContractingEntities] = useState<ContractingEntity[]>([]);
+  const [contractingEntityId, setContractingEntityId] = useState('');
   const [tariffs, setTariffs] = useState<TariffRate[]>([]);
   const [historyQuotations, setHistoryQuotations] = useState<HistoryQuotation[]>([]);
   const [items, setItems] = useState<CreateQuotationItemDto[]>([]);
@@ -94,6 +98,7 @@ export default function QuotationGenerate() {
       setProducts((current) => mergeProducts(current, result.items));
     }).catch((err) => setError(err.message));
     apiGet<CustomerPage>('/customers?page=1&pageSize=50').then((result) => setCustomers(result.items)).catch((err) => setError(err.message));
+    apiGet<ContractingEntityPage>('/contracting-entities?page=1&pageSize=50').then((result) => setContractingEntities(result.items)).catch((err) => setError(err.message));
     apiGet<TariffPage>('/tariff-rates?page=1&pageSize=50').then((result) => setTariffs(result.items)).catch((err) => setError(err.message));
     apiGet<HistoryPage>('/history-quotations?page=1&pageSize=50').then((result) => setHistoryQuotations(result.items)).catch((err) => setError(err.message));
   }, []);
@@ -145,7 +150,7 @@ export default function QuotationGenerate() {
 
   useEffect(() => {
     if (!id) return;
-    apiGet<QuotationDetail>(`/quotations/${id}`).then((result) => {
+    apiGet<QuotationDetail>(`/quotations/${id}?full=1`).then((result) => {
       if (result.quotation.status === 'completed') {
         setError('已完成报价单不可修改');
         return;
@@ -172,6 +177,7 @@ export default function QuotationGenerate() {
         customerName: result.quotation.customerName || '',
         remark: result.quotation.remark || '',
       }));
+      setContractingEntityId(result.quotation.contractingEntityId || '');
       setStatus(result.quotation.status);
       setItems(result.items.map((item) => ({
         productId: item.productId,
@@ -231,9 +237,14 @@ export default function QuotationGenerate() {
       setError('请先从客户列表选择已建档客户');
       return;
     }
+    if (!contractingEntityId) {
+      setError('\u8bf7\u5148\u9009\u62e9\u672c\u6b21\u62a5\u4ef7\u7684\u627f\u63a5\u5355\u4f4d');
+      return;
+    }
     const selectedCustomer = customers.find((customer) => customer.id === params.customerId);
     const dto = Object.fromEntries(Object.keys(defaultParams).map((key) => [key, effectiveParams[key as keyof typeof defaultParams]])) as unknown as CreateQuotationDto;
     dto.customerName = selectedCustomer?.name || '';
+    dto.contractingEntityId = contractingEntityId;
     dto.status = status;
     dto.items = items.map((item, index) => ({
       ...item,
@@ -247,9 +258,12 @@ export default function QuotationGenerate() {
   return (
     <section>
       <header className="page-header">
-        <div>
+        <div className="detail-heading-group">
+          <DetailBackButton to="/quotation/list" label="返回报价列表" />
+          <div>
           <h1>报价生成</h1>
           <p>配置参数、添加商品并保存报价单</p>
+          </div>
         </div>
         <div className="toolbar action-toolbar">
           <button type="button" onClick={downloadImportTemplate}>导入模板</button>
@@ -266,13 +280,20 @@ export default function QuotationGenerate() {
         <div className="panel">
           <h2>报价参数</h2>
           <div className="form-grid compact">
+            <label>
+              <span>报价单位</span>
+              <select required value={contractingEntityId} onChange={(event) => setContractingEntityId(event.target.value)}>
+                <option value="">请选择承接单位</option>
+                {contractingEntities.map((entity) => <option key={entity.id} value={entity.id}>{entity.shortName || entity.entityName} ({entity.entityCode})</option>)}
+              </select>
+            </label>
             {Object.entries(defaultParams).filter(([key]) => key !== 'customerName').map(([key]) => (
               <label key={key}>
                 <span>{paramLabel(key)}</span>
                 {key === 'customerId' ? (
                   <select name={key} value={params.customerId} onChange={(event) => selectCustomer(event.target.value)}>
                     <option value="">请选择已建档客户</option>
-                    {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+                    {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.shortName || customer.name}</option>)}
                   </select>
                 ) : (
                   <input
@@ -298,7 +319,7 @@ export default function QuotationGenerate() {
             {filteredProducts.map((product) => (
               <button className="product-chip" type="button" key={product.id} onClick={() => addItem(product)}>
                 <span>{product.name}</span>
-                <small>({product.productCode}) ${Number(product.suggestedPrice || 0).toFixed(2)}</small>
+                <small>({product.productCode}) ${formatMoney(product.suggestedPrice)}</small>
                 <strong>+ 添加</strong>
               </button>
             ))}
@@ -460,6 +481,7 @@ export default function QuotationGenerate() {
                   <button type="button" key={product.id} onClick={() => chooseRowProduct(index, product)}>
                     <span>{product.productCode}</span>
                     <strong>{product.name}</strong>
+                    <small>{[product.brand || '未指定品牌', product.spec].filter(Boolean).join(' / ')}</small>
                   </button>
                 ))}
               </div>
@@ -617,7 +639,7 @@ export default function QuotationGenerate() {
     setParams((current) => ({
       ...current,
       customerId,
-      customerName: customer?.name || '',
+      customerName: customer?.shortName || customer?.name || '',
     }));
   }
 
@@ -1138,7 +1160,7 @@ function roundPreview<T extends Record<string, unknown>>(input: T): T {
 }
 
 function money(value = 0) {
-  return Number(value || 0).toFixed(2);
+  return formatMoney(value);
 }
 
 function integer(value = 0) {

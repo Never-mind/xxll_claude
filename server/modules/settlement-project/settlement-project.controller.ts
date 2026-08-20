@@ -31,8 +31,29 @@ export class SettlementProjectController {
   }
 
   @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.settlements.detail(id);
+  detail(
+    @Param('id') id: string,
+    @Query('itemsPage') itemsPage = '1',
+    @Query('unpurchasedPage') unpurchasedPage = '1',
+    @Query('purchasedPage') purchasedPage = '1',
+    @Query('expensesPage') expensesPage = '1',
+    @Query('salesPage') salesPage = '1',
+    @Query('invoicesPage') invoicesPage = '1',
+    @Query('attachmentsPage') attachmentsPage = '1',
+    @Query('pageSize') pageSize = '10',
+    @Query('full') full = '',
+  ) {
+    if (full === '1') return this.settlements.detail(id);
+    return this.settlements.detailPage(id, {
+      itemsPage: Number(itemsPage),
+      unpurchasedPage: Number(unpurchasedPage),
+      purchasedPage: Number(purchasedPage),
+      expensesPage: Number(expensesPage),
+      salesPage: Number(salesPage),
+      invoicesPage: Number(invoicesPage),
+      attachmentsPage: Number(attachmentsPage),
+      pageSize: Number(pageSize),
+    });
   }
 
   @Get(':id/export')

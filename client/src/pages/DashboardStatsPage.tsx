@@ -13,20 +13,33 @@ interface TrendDay {
 
 export default function DashboardStatsPage() {
   const [rows, setRows] = useState<SettlementProject[]>([]);
-  const [details, setDetails] = useState<SettlementProjectDetail[]>([]);
+  const [statsRows, setStatsRows] = useState<SettlementProject[]>([]);
+  const [statsDetails, setStatsDetails] = useState<SettlementProjectDetail[]>([]);
+  const [projectPage, setProjectPage] = useState(1);
+  const [projectTotal, setProjectTotal] = useState(0);
   const [periodDays, setPeriodDays] = useState(30);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    apiGet<SettlementProjectPage>(`/settlement-projects?page=${projectPage}&pageSize=10`)
+      .then((result) => {
+        setRows(result.items);
+        setProjectPage(result.page);
+        setProjectTotal(result.total);
+      })
+      .catch((err) => setError(err.message));
+  }, [projectPage]);
+
+  useEffect(() => {
     apiGet<SettlementProjectPage>('/settlement-projects?page=1&pageSize=50')
       .then(async (result) => {
-        setRows(result.items);
-        setDetails(await loadSettlementDetails(result.items));
+        setStatsRows(result.items);
+        setStatsDetails(await loadSettlementDetails(result.items));
       })
       .catch((err) => setError(err.message));
   }, []);
 
-  const stats = useMemo(() => buildStats(rows, details, periodDays), [rows, details, periodDays]);
+  const stats = useMemo(() => buildStats(statsRows, statsDetails, periodDays), [statsRows, statsDetails, periodDays]);
 
   return (
     <section className="dashboard-page">
@@ -92,7 +105,7 @@ export default function DashboardStatsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 10).map((row) => (
+              {rows.map((row) => (
                 <tr key={row.id}>
                   <td><LinkedNumber to={`/quotation/detail/${row.quotationId}`}>{row.quotationNo}</LinkedNumber></td>
                   <td>{row.customerName || '-'}</td>
@@ -113,6 +126,7 @@ export default function DashboardStatsPage() {
             </tbody>
           </table>
         </div>
+        <div className="pagination-bar"><span>共 {projectTotal} 条</span><div className="pagination-actions"><button type="button" disabled={projectPage <= 1} onClick={() => setProjectPage((current) => current - 1)}>上一页</button><span>第 {projectPage} / {Math.max(1, Math.ceil(projectTotal / 10))} 页</span><button type="button" disabled={projectPage >= Math.max(1, Math.ceil(projectTotal / 10))} onClick={() => setProjectPage((current) => current + 1)}>下一页</button></div></div>
       </div>
     </section>
   );
@@ -123,7 +137,7 @@ async function loadSettlementDetails(projects: SettlementProject[]): Promise<Set
   const batchSize = 2;
   for (let index = 0; index < projects.length; index += batchSize) {
     const batch = projects.slice(index, index + batchSize);
-    details.push(...await Promise.all(batch.map((row) => apiGet<SettlementProjectDetail>(`/settlement-projects/${row.id}`))));
+    details.push(...await Promise.all(batch.map((row) => apiGet<SettlementProjectDetail>(`/settlement-projects/${row.id}?full=1`))));
   }
   return details;
 }

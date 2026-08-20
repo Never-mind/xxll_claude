@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { apiGet, apiWrite } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import DetailBackButton from '../components/DetailBackButton.js';
 import LinkedNumber from '../components/LinkedNumber.js';
 import type {
   CreateCustomerPoDto,
@@ -55,6 +56,8 @@ export default function CustomerPoPage() {
   const [selectedPoId, setSelectedPoId] = useState('');
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('all');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [form, setForm] = useState<CreateCustomerPoDto>(() => defaultForm());
   const [items, setItems] = useState<CustomerPoFormItem[]>([emptyItem()]);
   const [productQueries, setProductQueries] = useState<Record<number, string>>({});
@@ -62,9 +65,10 @@ export default function CustomerPoPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   useEffect(() => {
-    loadList().catch((err) => setError(err.message));
     apiGet<CustomerPage>('/customers?page=1&pageSize=50').then((result) => setCustomers(result.items)).catch((err) => setError(err.message));
     apiGet<ProductPage>('/products?page=1&pageSize=50').then((result) => setProducts(result.items)).catch((err) => setError(err.message));
   }, []);
@@ -87,7 +91,7 @@ export default function CustomerPoPage() {
       loadList().catch((err) => setError(err.message));
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [keyword, status]);
+  }, [keyword, status, page]);
 
   useEffect(() => {
     const entries = Object.entries(productQueries)
@@ -118,12 +122,14 @@ export default function CustomerPoPage() {
   const unmatchedCount = useMemo(() => items.filter((item) => !item.matchedProductId).length, [items]);
   const isDetailMode = Boolean(routePoId);
 
-  async function loadList() {
-    const params = new URLSearchParams({ page: '1', pageSize: '50' });
+  async function loadList(nextPage = page) {
+    const params = new URLSearchParams({ page: String(nextPage), pageSize: String(pageSize) });
     if (keyword.trim()) params.set('keyword', keyword.trim());
     if (status !== 'all') params.set('status', status);
     const result = await apiGet<CustomerPoPage>(`/customer-pos?${params}`);
     setPos(result.items);
+    setTotal(result.total);
+    setPage(result.page);
   }
 
   async function openPo(id: string) {
@@ -323,9 +329,12 @@ export default function CustomerPoPage() {
   return (
     <section>
       <header className="page-header">
-        <div>
+        <div className={isDetailMode ? 'detail-heading-group' : ''}>
+          {isDetailMode && <DetailBackButton to="/customer-pos" label="返回客户 PO 列表" />}
+          <div>
           <h1>{'\u5ba2\u6237 PO'}</h1>
           <p>{isDetailMode ? '\u7ef4\u62a4\u5ba2\u6237 PO \u57fa\u672c\u4fe1\u606f\u548c\u660e\u7ec6\uff0c\u5b8c\u6210\u4ea7\u54c1\u5339\u914d\u540e\u53ef\u751f\u6210\u62a5\u4ef7\u5355\u3002' : '\u67e5\u770b\u5ba2\u6237 PO \u5217\u8868\uff0c\u8ddf\u8e2a\u6570\u91cf\u3001\u91d1\u989d\u548c\u5173\u8054\u62a5\u4ef7\u5355\u3002'}</p>
+          </div>
         </div>
         <div className="toolbar action-toolbar">
           <button type="button" onClick={newPo}>{'\u65b0\u589e PO'}</button>
@@ -337,7 +346,6 @@ export default function CustomerPoPage() {
                 <input type="file" accept=".xlsx,.xls" onChange={importPoItems} />
               </label>
               <button type="button" disabled={!selectedPoId || loading} onClick={generateQuotation}>{'\u751f\u6210\u62a5\u4ef7\u5355'}</button>
-              <button type="button" onClick={() => navigate('/customer-pos')}>{'\u8fd4\u56de\u5217\u8868'}</button>
             </>
           )}
         </div>
@@ -401,6 +409,17 @@ export default function CustomerPoPage() {
             </tbody>
           </table>
         </div>
+       )}
+
+      {!isDetailMode && (
+        <div className="pagination-bar">
+          <span>共 {total} 条</span>
+          <div className="pagination-actions">
+            <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>上一页</button>
+            <span>第 {page} / {totalPages} 页</span>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>下一页</button>
+          </div>
+        </div>
       )}
 
       {isDetailMode && (
@@ -414,7 +433,7 @@ export default function CustomerPoPage() {
               {"\u5ba2\u6237"}
               <select value={form.customerId} onChange={(event) => setForm({ ...form, customerId: event.target.value })} required>
                 <option value="">{"\u8bf7\u9009\u62e9\u5ba2\u6237"}</option>
-                {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+                {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.shortName || customer.name}</option>)}
               </select>
             </label>
             <label>

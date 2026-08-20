@@ -5,4 +5,7 @@ dist/
 .env
 .vercel/
 
+# Local database snapshots contain business data and must not be pushed to source control.
+backups/*.sql
+
 .vercel

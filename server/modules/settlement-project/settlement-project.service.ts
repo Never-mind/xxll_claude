@@ -18,6 +18,7 @@ import type {
   SettlementOrderItemDto,
   SettlementProject,
   SettlementProjectDetail,
+  SettlementProjectDetailPage,
   SettlementSale,
   UpdateSettlementItemDto,
   UpdateSettlementExpenseDto,
@@ -38,23 +39,12 @@ export class SettlementProjectService {
   constructor(@Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService) {}
 
   async list(page = 1, pageSize = 10, keyword = ''): Promise<PageResult<SettlementProject>> {
-    await this.recalculateAllProjects();
-    const rows = (await this.enrichedProjects())
-      .sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''));
-    const normalizedKeyword = keyword.trim().toLowerCase();
-    const filtered = normalizedKeyword
-      ? rows.filter((row) =>
-          [row.projectNo, row.quotationNo, row.customerName].some((value) => String(value ?? '').toLowerCase().includes(normalizedKeyword)),
-        )
-      : rows;
-    const safePage = Math.max(1, Number(page) || 1);
-    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
-    return {
-      items: filtered.slice((safePage - 1) * safePageSize, safePage * safePageSize),
-      total: filtered.length,
-      page: safePage,
-      pageSize: safePageSize,
-    };
+    const result = await this.storage.paginate<SettlementProject>(PROJECT_FILE, page, pageSize, undefined, {
+      search: { keyword, columns: ['projectNo', 'quotationNo', 'customerName', 'remark'] },
+      orderBy: [{ column: 'createdAt', direction: 'DESC' }, { column: 'id', direction: 'DESC' }],
+    });
+    const items = await Promise.all(result.items.map((project) => this.recalculate(project.id)));
+    return { ...result, items };
   }
 
   async detail(id: string): Promise<SettlementProjectDetail> {
@@ -78,6 +68,37 @@ export class SettlementProjectService {
     };
   }
 
+  async detailPage(
+    id: string,
+    pages: {
+      itemsPage?: number;
+      unpurchasedPage?: number;
+      purchasedPage?: number;
+      expensesPage?: number;
+      salesPage?: number;
+      invoicesPage?: number;
+      attachmentsPage?: number;
+      pageSize?: number;
+    } = {},
+  ): Promise<SettlementProjectDetailPage> {
+    await this.recalculate(id);
+    const project = (await this.enrichedProjects()).find((item) => item.id === id);
+    if (!project) throw new Error(`Settlement project ${id} not found`);
+    const pageSize = pages.pageSize || 10;
+    const [items, unpurchasedItems, purchasedItems, expenses, sales, invoices, attachments] = await Promise.all([
+      this.storage.paginate<SettlementItem>(ITEM_FILE, pages.itemsPage || 1, pageSize, { projectId: id }),
+      this.storage.paginate<SettlementItem>(ITEM_FILE, pages.unpurchasedPage || 1, pageSize, { projectId: id, ordered: false }),
+      this.storage.paginate<SettlementItem>(ITEM_FILE, pages.purchasedPage || 1, pageSize, { projectId: id, ordered: true }),
+      this.storage.paginate<SettlementExpense>(EXPENSE_FILE, pages.expensesPage || 1, pageSize, { projectId: id }),
+      this.storage.paginate<SettlementSale>(SALE_FILE, pages.salesPage || 1, pageSize, { projectId: id }),
+      this.storage.paginate<SettlementInvoice>(INVOICE_FILE, pages.invoicesPage || 1, pageSize, { projectId: id }),
+      this.storage.paginate<SettlementAttachment>(ATTACHMENT_FILE, pages.attachmentsPage || 1, pageSize, { projectId: id }, {
+        orderBy: [{ column: 'uploadedAt', direction: 'DESC' }, { column: 'id', direction: 'DESC' }],
+      }),
+    ]);
+    return { project, items, unpurchasedItems, purchasedItems, expenses, sales, invoices, attachments };
+  }
+
   async ensureForQuotation(quotation: Quotation, quotationItems: QuotationItem[]): Promise<SettlementProject> {
     if (quotation.status !== 'completed') throw new Error('Only completed quotations can create settlement projects');
     const projects = await this.projectRowsWithNumbers();
@@ -92,6 +113,8 @@ export class SettlementProjectService {
       quotationId: quotation.id,
       quotationNo: quotation.quotationNo,
       customerName: quotation.customerName,
+      contractingEntityId: quotation.contractingEntityId || '',
+      contractingEntityName: quotation.contractingEntityName || '',
       remark: quotation.remark,
       exchangeRateUsd: quotation.exchangeRateUsd,
       exchangeRateMxn: quotation.exchangeRateMxn,
@@ -357,17 +380,15 @@ export class SettlementProjectService {
       this.projectRowsWithNumbers(),
       this.storage.readTable<Quotation>(QUOTATION_FILE),
     ]);
-    return projects.map((project) => ({
-      ...project,
-      remark: project.remark || quotations.find((quotation) => quotation.id === project.quotationId)?.remark || '',
-    }));
-  }
-
-  private async recalculateAllProjects(): Promise<void> {
-    const projects = await this.projectRowsWithNumbers();
-    for (const project of projects) {
-      await this.recalculate(project.id);
-    }
+    return projects.map((project) => {
+      const quotation = quotations.find((item) => item.id === project.quotationId);
+      return {
+        ...project,
+        remark: project.remark || quotation?.remark || '',
+        contractingEntityId: project.contractingEntityId || quotation?.contractingEntityId || '',
+        contractingEntityName: project.contractingEntityName || quotation?.contractingEntityName || '',
+      };
+    });
   }
 
   private async projectRowsWithNumbers(): Promise<SettlementProject[]> {
@@ -461,6 +482,7 @@ function convertToUsd(amount: number, currency: string, project: SettlementProje
 
 function settlementProjectListRow(project: SettlementProject) {
   return {
+    承接单位: project.contractingEntityName || '未设置',
     报价单号: project.quotationNo,
     客户: project.customerName || '',
     项目名称: project.remark || '',
@@ -532,6 +554,7 @@ function settlementInvoiceRow(invoice: SettlementInvoice) {
   return {
     类型: invoice.type === 'income' ? '收入' : '成本',
     账期: invoice.accountPeriod || '',
+    财务记账日期: invoice.accountingDate || '',
     公司主体: invoice.companyEntity || '',
     发票主体: invoice.invoiceEntity || '',
     发票日期: invoice.invoiceDate || '',
@@ -597,6 +620,7 @@ export function __testOnlyInvoicePatch(projectId: string, dto: CreateSettlementI
     projectId,
     type: dto.type,
     accountPeriod: dto.accountPeriod || '',
+    accountingDate: dto.accountingDate || '',
     companyEntity: dto.companyEntity || '',
     invoiceEntity: dto.invoiceEntity || '',
     invoiceDate: dto.invoiceDate || '',

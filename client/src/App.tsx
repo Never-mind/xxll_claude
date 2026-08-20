@@ -3,6 +3,7 @@ import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-d
 import {
   BarChart3,
   BriefcaseBusiness,
+  Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   FileBarChart2,
   FilePlus2,
   FileText,
+  Factory,
   LogOut,
   Package,
   ReceiptText,
@@ -19,17 +21,25 @@ import {
 } from 'lucide-react';
 import ResizableTables from './components/ResizableTables.js';
 import CustomerManage from './pages/CustomerManage.js';
+import CustomerDetailPage from './pages/CustomerDetailPage.js';
+import ContractingEntityManage from './pages/ContractingEntityManage.js';
+import ContractingEntityDetailPage from './pages/ContractingEntityDetailPage.js';
 import CustomerPoPage from './pages/CustomerPoPage.js';
 import DashboardStatsPage from './pages/DashboardStatsPage.js';
 import FinanceInvoicePage from './pages/FinanceInvoicePage.js';
 import HistoryQuotationManage from './pages/HistoryQuotationManage.js';
 import LoginPage from './pages/LoginPage.js';
 import ProductManage from './pages/ProductManage.js';
+import ProductArchivePreview from './pages/ProductArchivePreview.js';
+import ProductListPreview from './pages/ProductListPreview.js';
+import ProductModelPreview from './pages/ProductModelPreview.js';
 import QuotationDetailPage from './pages/QuotationDetailPage.js';
 import QuotationGenerate from './pages/QuotationGenerate.js';
 import QuotationList from './pages/QuotationList.js';
 import SettlementProjectDetailPage from './pages/SettlementProjectDetail.js';
 import SettlementProjectList from './pages/SettlementProjectList.js';
+import SupplierDetailPage from './pages/SupplierDetailPage.js';
+import SupplierManage from './pages/SupplierManage.js';
 import TariffRateManage from './pages/TariffRateManage.js';
 
 const primaryNavItems = [
@@ -57,12 +67,14 @@ const navGroups = [
     title: '\u7528\u6237',
     items: [
       { to: '/customers', label: '\u5ba2\u6237\u5217\u8868', icon: Users },
+      { to: '/contracting-entities', label: '\u627f\u63a5\u5355\u4f4d', icon: Building2 },
     ],
   },
   {
     title: '\u4ea7\u54c1',
     items: [
       { to: '/', label: '\u4ea7\u54c1\u7ba1\u7406', icon: Package },
+      { to: '/suppliers', label: '\u4f9b\u5e94\u5546\u7ba1\u7406', icon: Factory },
       { to: '/tariff', label: '\u7a0e\u7387\u7ba1\u7406', icon: Tags },
     ],
   },
@@ -70,7 +82,12 @@ const navGroups = [
 
 const pageTitles: Record<string, string> = {
   '/': '\u4ea7\u54c1\u7ba1\u7406',
+  '/product-model-preview': '\u4ea7\u54c1\u7ed3\u6784\u9884\u89c8',
+  '/product-archive-preview': '\u4ea7\u54c1\u4e3b\u6863\u9884\u89c8',
+  '/product-list-preview': '\u4ea7\u54c1\u4e3b\u6863\u5217\u8868\u9884\u89c8',
   '/customers': '\u5ba2\u6237\u5217\u8868',
+  '/contracting-entities': '\u627f\u63a5\u5355\u4f4d',
+  '/suppliers': '\u4f9b\u5e94\u5546\u7ba1\u7406',
   '/dashboard': '\u7edf\u8ba1\u9762\u677f',
   '/customer-pos': '\u5ba2\u6237PO',
   '/finance': '\u53d1\u7968',
@@ -95,11 +112,24 @@ function routeTitle(pathname: string): string {
   return pageTitles[pathname]
     || (pathname.startsWith('/quotation/detail/') ? '\u62a5\u4ef7\u5355\u8be6\u60c5' : '')
     || (pathname.startsWith('/customer-pos/') ? '\u5ba2\u6237PO\u8be6\u60c5' : '')
+    || (pathname.startsWith('/customers/') ? '\u5ba2\u6237\u6863\u6848' : '')
+    || (pathname.startsWith('/contracting-entities/') ? '\u627f\u63a5\u5355\u4f4d\u6863\u6848' : '')
+    || (pathname.startsWith('/suppliers/') ? '\u4f9b\u5e94\u5546\u6863\u6848' : '')
     || (pathname.startsWith('/settlement-projects/') ? '\u9879\u76ee\u7ed3\u7b97\u8be6\u60c5' : 'Selection Quote');
 }
 
+function routeParentTitle(pathname: string): string {
+  if (pathname.startsWith('/quotation/detail/') || pathname.startsWith('/quotation/generate')) return '\u62a5\u4ef7\u5217\u8868';
+  if (pathname.startsWith('/customer-pos/')) return '\u5ba2\u6237PO';
+  if (pathname.startsWith('/customers/')) return '\u5ba2\u6237\u5217\u8868';
+  if (pathname.startsWith('/contracting-entities/')) return '\u627f\u63a5\u5355\u4f4d';
+  if (pathname.startsWith('/suppliers/')) return '\u4f9b\u5e94\u5546\u7ba1\u7406';
+  if (pathname.startsWith('/settlement-projects/')) return '\u9879\u76ee\u7ed3\u7b97';
+  return '';
+}
+
 function tabForLocation(location: { pathname: string; search: string; hash: string }): WorkspaceTab {
-  const key = `${location.pathname}${location.search}${location.hash}`;
+  const key = workspaceKey(location);
   return {
     key,
     pathname: location.pathname,
@@ -110,13 +140,37 @@ function tabForLocation(location: { pathname: string; search: string; hash: stri
   };
 }
 
+function workspaceKey(location: { pathname: string; search: string; hash: string }): string {
+  const { pathname } = location;
+  if (pathname === '/customers/new' || pathname.startsWith('/customers/')) return 'customer-detail';
+  if (pathname === '/suppliers/new' || pathname.startsWith('/suppliers/')) return 'supplier-detail';
+  if (pathname === '/contracting-entities/new' || pathname.startsWith('/contracting-entities/')) return 'contracting-entity-detail';
+  if (pathname === '/customer-pos/new' || pathname.startsWith('/customer-pos/')) return 'customer-po-detail';
+  if (pathname === '/quotation/generate' || pathname.startsWith('/quotation/generate/')) return 'quotation-editor';
+  if (pathname.startsWith('/quotation/detail/')) return 'quotation-detail';
+  if (pathname.startsWith('/settlement-projects/')) return 'settlement-project-detail';
+  return `${pathname}${location.search}${location.hash}`;
+}
+
+function mergeWorkspaceTab(tabs: WorkspaceTab[], nextTab: WorkspaceTab): WorkspaceTab[] {
+  const index = tabs.findIndex((tab) => tab.key === nextTab.key);
+  if (index < 0) return [...tabs, nextTab];
+  const current = tabs[index];
+  if (current.pathname === nextTab.pathname && current.search === nextTab.search && current.hash === nextTab.hash && current.title === nextTab.title) return tabs;
+  return tabs.map((tab, tabIndex) => tabIndex === index ? { ...nextTab, pinned: current.pinned || nextTab.pinned } : tab);
+}
+
+function normalizeWorkspaceTabs(tabs: WorkspaceTab[]): WorkspaceTab[] {
+  return tabs.reduce<WorkspaceTab[]>((result, tab) => mergeWorkspaceTab(result, tabForLocation(tab)), []);
+}
+
 function initialWorkspaceTabs(location: { pathname: string; search: string; hash: string }): WorkspaceTab[] {
   const dashboardTab = tabForLocation({ pathname: '/dashboard', search: '', hash: '' });
   try {
     const saved = JSON.parse(sessionStorage.getItem('quotation.workspace-tabs') || '[]') as WorkspaceTab[];
-    const validTabs = saved.filter((tab) => tab?.key && tab.pathname);
+    const validTabs = normalizeWorkspaceTabs(saved.filter((tab) => tab?.key && tab.pathname));
     const currentTab = tabForLocation(location);
-    const tabs = validTabs.some((tab) => tab.key === currentTab.key) ? validTabs : [...validTabs, currentTab];
+    const tabs = mergeWorkspaceTab(validTabs, currentTab);
     return tabs.some((tab) => tab.pathname === '/dashboard') ? tabs : [dashboardTab, ...tabs];
   } catch {
     const currentTab = tabForLocation(location);
@@ -153,10 +207,11 @@ export default function App() {
 
   const currentTab = tabForLocation(location);
   const pageTitle = currentTab.title;
+  const parentTitle = routeParentTitle(location.pathname);
 
   useEffect(() => {
-    setWorkspaceTabs((current) => current.some((tab) => tab.key === currentTab.key) ? current : [...current, currentTab]);
-  }, [currentTab.key]);
+    setWorkspaceTabs((current) => mergeWorkspaceTab(current, currentTab));
+  }, [location.pathname, location.search, location.hash]);
 
   useEffect(() => {
     sessionStorage.setItem('quotation.workspace-tabs', JSON.stringify(workspaceTabs));
@@ -223,6 +278,7 @@ export default function App() {
           <div className="workspace-crumb">
             <span>Selection Quote</span>
             <ChevronRight size={15} />
+            {parentTitle && <><span>{parentTitle}</span><ChevronRight size={15} /></>}
             <strong>{pageTitle}</strong>
           </div>
           <div className="workspace-user">
@@ -259,7 +315,18 @@ function ApplicationRoutes({ location }: { location: Pick<WorkspaceTab, 'pathnam
   return (
     <Routes location={location}>
       <Route path="/" element={<ProductManage />} />
+      <Route path="/product-model-preview" element={<ProductModelPreview />} />
+      <Route path="/product-archive-preview" element={<ProductArchivePreview />} />
+      <Route path="/product-list-preview" element={<ProductListPreview />} />
       <Route path="/customers" element={<CustomerManage />} />
+      <Route path="/customers/new" element={<CustomerDetailPage />} />
+      <Route path="/customers/:id" element={<CustomerDetailPage />} />
+      <Route path="/contracting-entities" element={<ContractingEntityManage />} />
+      <Route path="/contracting-entities/new" element={<ContractingEntityDetailPage />} />
+      <Route path="/contracting-entities/:id" element={<ContractingEntityDetailPage />} />
+      <Route path="/suppliers" element={<SupplierManage />} />
+      <Route path="/suppliers/new" element={<SupplierDetailPage />} />
+      <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
       <Route path="/dashboard" element={<DashboardStatsPage />} />
       <Route path="/customer-pos" element={<CustomerPoPage />} />
       <Route path="/customer-pos/:id" element={<CustomerPoPage />} />

@@ -15,21 +15,21 @@ export class HistoryQuotationService {
   ) {}
 
   async list(keyword = '', page = 1, pageSize = 10): Promise<PageResult<HistoryQuotation>> {
-    const all = await this.enrichedRows();
-    const q = keyword.trim().toLowerCase();
-    const filtered = (q
-      ? all.filter((item) =>
-          [item.customerName, item.productCode, item.productName].some((value) => value.toLowerCase().includes(q)),
-        )
-      : all)
-      .sort((left, right) => Date.parse(right.quotationDate || right.createdAt || '') - Date.parse(left.quotationDate || left.createdAt || ''));
-    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
-    const safePage = Math.max(1, Number(page) || 1);
+    const pageResult = await this.storage.paginate<HistoryQuotation>(FILE, page, pageSize, undefined, {
+      search: { keyword, columns: ['customerName', 'productCode', 'productName'] },
+      orderBy: [{ column: 'quotationDate', direction: 'DESC' }, { column: 'createdAt', direction: 'DESC' }],
+    });
+    const items = await Promise.all(pageResult.items.map(async (item) => {
+      const product = await this.products.findByCode(item.productCode);
+      return {
+        ...item,
+        spec: item.spec || product?.spec,
+        brand: item.brand || product?.brand,
+      };
+    }));
     return {
-      items: filtered.slice((safePage - 1) * safePageSize, safePage * safePageSize),
-      total: filtered.length,
-      page: safePage,
-      pageSize: safePageSize,
+      ...pageResult,
+      items,
     };
   }
 

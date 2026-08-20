@@ -3,6 +3,7 @@ import { apiGet, apiWrite, download, upload } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
 import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { PageResult } from '../../../shared/api.interface.js';
+import { formatMoney } from '../utils/display.js';
 
 export interface FieldConfig {
   key: string;
@@ -303,7 +304,7 @@ function formatCell(value: unknown, column: FieldConfig) {
     ) : '';
   }
   if (typeof value === 'boolean') return value ? '是' : '否';
-  if (typeof value === 'number') return isQuantityLikeColumn(column.key) ? integer(value) : value.toFixed(2);
+  if (typeof value === 'number') return isQuantityLikeColumn(column.key) ? integer(value) : formatMoney(value);
   return String(value ?? '');
 }
 

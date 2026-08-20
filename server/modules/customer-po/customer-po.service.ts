@@ -27,23 +27,24 @@ export class CustomerPoService {
   ) {}
 
   async list(keyword = '', status = 'all', page = 1, pageSize = 10): Promise<PageResult<CustomerPo>> {
-    const [all, allItems] = await Promise.all([
-      this.storage.readTable<CustomerPo>(PO_FILE),
-      this.storage.readTable<CustomerPoItem>(ITEM_FILE),
-    ]);
-    const totals = customerPoTotals(allItems);
-    const q = keyword.trim().toLowerCase();
-    const filtered = all
-      .filter((po) => status && status !== 'all' ? po.status === status : true)
-      .filter((po) => q ? [po.poNo, po.customerName, po.remark, po.quotationNo].some((value) => String(value ?? '').toLowerCase().includes(q)) : true)
-      .sort((left, right) => Date.parse(right.createdAt || right.updatedAt || '') - Date.parse(left.createdAt || left.updatedAt || ''));
-    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
-    const safePage = Math.max(1, Number(page) || 1);
+    const pageResult = await this.storage.paginate<CustomerPo>(
+      PO_FILE,
+      page,
+      pageSize,
+      status && status !== 'all' ? { status: status as CustomerPo['status'] } : undefined,
+      {
+        search: { keyword, columns: ['poNo', 'customerName', 'remark', 'quotationNo'] },
+        orderBy: [{ column: 'createdAt', direction: 'DESC' }, { column: 'id', direction: 'DESC' }],
+      },
+    );
+    const totals = await Promise.all(pageResult.items.map(async (po) => {
+      const items = await this.storage.query<CustomerPoItem>(ITEM_FILE, { poId: po.id });
+      return [po.id, customerPoTotals(items).get(po.id)] as const;
+    }));
+    const totalsByPoId = new Map(totals);
     return {
-      items: filtered.slice((safePage - 1) * safePageSize, safePage * safePageSize).map((po) => ({ ...po, ...totals.get(po.id) })),
-      total: filtered.length,
-      page: safePage,
-      pageSize: safePageSize,
+      ...pageResult,
+      items: pageResult.items.map((po) => ({ ...po, ...totalsByPoId.get(po.id) })),
     };
   }
 
@@ -67,7 +68,7 @@ export class CustomerPoService {
     const poInput = {
       poNo: input.poNo?.trim() || await this.nextPoNo(),
       customerId: customer.id,
-      customerName: customer.name,
+      customerName: customer.shortName || customer.name,
       poDate: input.poDate || new Date().toISOString().slice(0, 10),
       deliveryDate: input.deliveryDate || '',
       currency: input.currency || 'USD',

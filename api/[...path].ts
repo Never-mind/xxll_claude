@@ -101,10 +101,9 @@ async function lightweightWriteHandler(request: IncomingMessage, response: Serve
       return true;
     }
     const simpleMatch = url.pathname.match(/^\/api\/([^/]+)(?:\/([^/]+))?$/);
-    const tableByResource: Record<string, string> = {
-      products: 'products',
-      customers: 'customers',
-      'tariff-rates': 'tariff_rates',
+  const tableByResource: Record<string, string> = {
+    products: 'products',
+    'tariff-rates': 'tariff_rates',
       'history-quotations': 'history_quotations',
     };
     if (simpleMatch) {
@@ -131,10 +130,9 @@ async function lightweightDeleteHandler(request: IncomingMessage, response: Serv
   const match = url.pathname.match(/^\/api\/([^/]+)\/([^/]+)$/);
   if (!match) return false;
   const [, resource, id] = match;
-  const tableByResource: Record<string, string> = {
-    products: 'products',
-    customers: 'customers',
-    'tariff-rates': 'tariff_rates',
+    const tableByResource: Record<string, string> = {
+      products: 'products',
+      'tariff-rates': 'tariff_rates',
     'history-quotations': 'history_quotations',
   };
   try {
@@ -181,7 +179,6 @@ async function lightweightGetHandler(request: IncomingMessage, response: ServerR
   const url = getRequestUrl(request);
   const routes: Record<string, () => Promise<unknown>> = {
     '/api/products': () => listTable('products', url, ['productCode', 'name', 'category', 'brand']),
-    '/api/customers': () => listTable('customers', url, ['name', 'contactName', 'contactPhone', 'address']),
     '/api/tariff-rates': () => listTable('tariff_rates', url, ['deviceType', 'hsCode']),
     '/api/history-quotations': () => listTable('history_quotations', url, ['customerName', 'productCode', 'productName', 'brand']),
     '/api/quotations': () => listQuotations(url),

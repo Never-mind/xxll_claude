@@ -12,19 +12,9 @@ export class TariffRateService {
   constructor(@Inject(DatabaseStorageService) private readonly storage: DatabaseStorageService) {}
 
   async list(keyword = '', page = 1, pageSize = 10): Promise<PageResult<TariffRate>> {
-    const all = await this.all();
-    const q = keyword.trim().toLowerCase();
-    const filtered = q
-      ? all.filter((item) => [item.deviceType, item.hsCode].some((value) => value.toLowerCase().includes(q)))
-      : all;
-    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
-    const safePage = Math.max(1, Number(page) || 1);
-    return {
-      items: filtered.slice((safePage - 1) * safePageSize, safePage * safePageSize),
-      total: filtered.length,
-      page: safePage,
-      pageSize: safePageSize,
-    };
+    return this.storage.paginate<TariffRate>(FILE, page, pageSize, undefined, {
+      search: { keyword, columns: ['deviceType', 'hsCode'] },
+    });
   }
 
   all(): Promise<TariffRate[]> {

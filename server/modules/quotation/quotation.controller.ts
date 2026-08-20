@@ -41,8 +41,8 @@ export class QuotationController {
   }
 
   @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.quotations.detail(id);
+  detail(@Param('id') id: string, @Query('full') full = '') {
+    return full === '1' ? this.quotations.detail(id) : this.quotations.detailPage(id);
   }
 
   @Get(':id/items')

@@ -5,6 +5,7 @@ import FeedbackDialog from '../components/FeedbackDialog.js';
 import LinkedNumber from '../components/LinkedNumber.js';
 import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { FinanceInvoicePage, FinanceInvoiceRow, SettlementInvoiceType } from '../api.js';
+import { formatMoney } from '../utils/display.js';
 
 export default function FinanceInvoicePage() {
   const [rows, setRows] = useState<FinanceInvoiceRow[]>([]);
@@ -75,6 +76,7 @@ export default function FinanceInvoicePage() {
           <option value="income">收入</option>
           <option value="cost">成本</option>
         </select>
+        <div className="invoice-period-filter">
         <label className="toolbar-field">
           <span>账期开始</span>
           <input type="date" value={accountPeriodStart} onChange={(event) => {
@@ -89,18 +91,21 @@ export default function FinanceInvoicePage() {
             setPage(1);
           }} />
         </label>
+        </div>
         <button type="button" onClick={() => download(`/finance/invoices/export?${invoiceExportQuery(keyword, type, accountPeriodStart, accountPeriodEnd)}`)}>导出</button>
       </div>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>报价单号</th>
+              <th>项目单号</th>
+              <th>承接单位</th>
               <th>客户</th>
               <th>项目名称</th>
               <th>项目状态</th>
               <th>类型</th>
               <th>账期</th>
+              <th>财务记账日期</th>
               <th>公司主体</th>
               <th>发票主体</th>
               <th>发票日期</th>
@@ -117,18 +122,20 @@ export default function FinanceInvoicePage() {
             </tr>
           </thead>
           <tbody>
-            {loading && <LoadingTableRows columns={19} rows={Math.min(pageSize, 8)} />}
+            {loading && <LoadingTableRows columns={21} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.quotationNo ? <LinkedNumber to={row.projectId ? `/settlement-projects/${row.projectId}` : undefined}>{row.quotationNo}</LinkedNumber> : '-'}</td>
-                <td>{row.customerName || '-'}</td>
+                <td className="date-cell">{row.projectNo ? <LinkedNumber to={row.projectId ? `/settlement-projects/${row.projectId}` : undefined}>{row.projectNo}</LinkedNumber> : '-'}</td>
+                <td>{row.contractingEntityShortName || row.contractingEntityName || '未设置'}</td>
+                <td>{row.customerShortName || row.customerName || '-'}</td>
                 <td>{row.projectName || '-'}</td>
                 <td><span className={`badge ${row.projectStatus}`}>{row.projectStatus === 'completed' ? '已完成' : '进行中'}</span></td>
                 <td>{invoiceTypeLabel(row.type)}</td>
-                <td>{row.accountPeriod || '-'}</td>
+                <td className="date-cell">{row.accountPeriod || '-'}</td>
+                <td className="date-cell">{formatDate(row.accountingDate)}</td>
                 <td>{row.companyEntity || '-'}</td>
                 <td>{row.invoiceEntity || '-'}</td>
-                <td>{formatDate(row.invoiceDate)}</td>
+                <td className="date-cell">{formatDate(row.invoiceDate)}</td>
                 <td>{row.invoiceNo || '-'}</td>
                 <td className="numeric-cell">{money(row.invoiceTotal)}</td>
                 <td className="numeric-cell">{money(row.invoiceTaxExcludedTotal)}</td>
@@ -145,7 +152,7 @@ export default function FinanceInvoicePage() {
             ))}
             {!loading && !rows.length && (
               <tr>
-                <td colSpan={19} className="empty-cell">暂无发票明细</td>
+              <td colSpan={21} className="empty-cell">暂无发票明细</td>
               </tr>
             )}
           </tbody>
@@ -209,5 +216,5 @@ function invoiceExportQuery(keyword: string, type: string, accountPeriodStart: s
 }
 
 function money(value = 0) {
-  return Number(value || 0).toFixed(2);
+  return formatMoney(value);
 }

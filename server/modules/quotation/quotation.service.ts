@@ -6,7 +6,7 @@ import { HistoryQuotationService } from '../history-quotation/history-quotation.
 import { ProductService } from '../product/product.service.js';
 import { SettlementProjectService } from '../settlement-project/settlement-project.service.js';
 import { TariffRateService } from '../tariff-rate/tariff-rate.service.js';
-import type { CreateQuotationDto, PageResult, Quotation, QuotationDetail, QuotationItem } from '../../../shared/api.interface.js';
+import type { CreateQuotationDto, PageResult, Quotation, QuotationDetail, QuotationDetailPage, QuotationItem } from '../../../shared/api.interface.js';
 import { formalQuotationInputFromSaved, writeFormalQuotationWorkbook } from '../../../shared/formal-quotation-export.js';
 import { calculateQuotation } from './quotation-calculator.js';
 
@@ -25,17 +25,13 @@ export class QuotationService {
   ) {}
 
   async list(page = 1, pageSize = 10, status?: string): Promise<PageResult<Quotation>> {
-    const all = await this.storage.readTable<Quotation>(QUOTATION_FILE);
-    const filtered = (status && status !== 'all' ? all.filter((item) => item.status === status) : all)
-      .sort((left, right) => Date.parse(right.createdAt || right.updatedAt || '') - Date.parse(left.createdAt || left.updatedAt || ''));
-    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
-    const safePage = Math.max(1, Number(page) || 1);
-    return {
-      items: filtered.slice((safePage - 1) * safePageSize, safePage * safePageSize),
-      total: filtered.length,
-      page: safePage,
-      pageSize: safePageSize,
-    };
+    return this.storage.paginate<Quotation>(
+      QUOTATION_FILE,
+      page,
+      pageSize,
+      status && status !== 'all' ? { status: status as Quotation['status'] } : undefined,
+      { orderBy: [{ column: 'createdAt', direction: 'DESC' }, { column: 'id', direction: 'DESC' }] },
+    );
   }
 
   async detail(id: string): Promise<QuotationDetail> {
@@ -46,8 +42,18 @@ export class QuotationService {
     return { quotation, items: await this.withHistoricalDdpQuotes(quotation, items) };
   }
 
+  async detailPage(id: string, page = 1, pageSize = 10): Promise<QuotationDetailPage> {
+    const quotation = (await this.storage.query<Quotation>(QUOTATION_FILE, { id })).at(0);
+    if (!quotation) throw new Error(`Quotation ${id} not found`);
+    return { quotation, items: await this.items(id, page, pageSize) };
+  }
+
   async items(id: string, page = 1, pageSize = 10): Promise<PageResult<QuotationItem>> {
-    return this.storage.paginate<QuotationItem>(ITEM_FILE, page, pageSize, { quotationId: id });
+    const quotation = (await this.storage.query<Quotation>(QUOTATION_FILE, { id })).at(0);
+    if (!quotation) throw new Error(`Quotation ${id} not found`);
+    const result = await this.storage.paginate<QuotationItem>(ITEM_FILE, page, pageSize, { quotationId: id });
+    const items = result.items.map((item) => normalizeQuotationItemForDisplay(item, quotation));
+    return { ...result, items: await this.withHistoricalDdpQuotes(quotation, items) };
   }
 
   async itemsForEdit(id: string): Promise<QuotationItem[]> {
@@ -57,11 +63,14 @@ export class QuotationService {
   async create(dto: CreateQuotationDto): Promise<QuotationDetail> {
     const customer = dto.customerId ? await this.customers.findById(dto.customerId) : undefined;
     if (!customer) throw new Error('Please select an archived customer');
+    const contractingEntity = await this.resolveContractingEntity(dto.contractingEntityId);
     const calculated = calculateQuotation(dto, await this.products.all(), await this.tariffs.all());
     const quotation = await this.storage.insert<Quotation>(QUOTATION_FILE, {
       ...calculated.quotation,
       customerId: customer.id,
-      customerName: customer.name,
+      customerName: customer.shortName || customer.name,
+      contractingEntityId: contractingEntity?.id || '',
+      contractingEntityName: contractingEntity?.shortName || contractingEntity?.entityName || '',
       sourceType: dto.sourceType || '',
       sourcePoId: dto.sourcePoId || '',
       sourcePoNo: dto.sourcePoNo || '',
@@ -88,11 +97,18 @@ export class QuotationService {
     if (existing.quotation.status === 'completed') throw new Error('Completed quotations cannot be edited');
     const customer = dto.customerId ? await this.customers.findById(dto.customerId) : undefined;
     if (!customer) throw new Error('Please select an archived customer');
+    const contractingEntity = dto.contractingEntityId === undefined
+      ? existing.quotation.contractingEntityId
+        ? { id: existing.quotation.contractingEntityId, entityName: existing.quotation.contractingEntityName || '', shortName: existing.quotation.contractingEntityName || '' }
+        : undefined
+      : await this.resolveContractingEntity(dto.contractingEntityId);
     const calculated = calculateQuotation(dto, await this.products.all(), await this.tariffs.all());
     const quotation = await this.storage.update<Quotation>(QUOTATION_FILE, id, {
       ...calculated.quotation,
       customerId: customer.id,
-      customerName: customer.name,
+      customerName: customer.shortName || customer.name,
+      contractingEntityId: contractingEntity?.id || '',
+      contractingEntityName: contractingEntity?.shortName || contractingEntity?.entityName || '',
       sourceType: dto.sourceType || '',
       sourcePoId: dto.sourcePoId || '',
       sourcePoNo: dto.sourcePoNo || '',
@@ -180,6 +196,14 @@ export class QuotationService {
     }
   }
 
+  private async resolveContractingEntity(id?: string): Promise<{ id: string; entityName: string; shortName?: string } | undefined> {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return undefined;
+    const entity = (await this.storage.query<{ id: string; entityName: string; shortName?: string }>('contracting_entities.xlsx', { id: normalizedId })).at(0);
+    if (!entity) throw new Error('Selected contracting entity not found');
+    return { id: entity.id, entityName: entity.entityName, shortName: entity.shortName || entity.entityName };
+  }
+
   private async withHistoricalDdpQuotes(quotation: Quotation, items: QuotationItem[]): Promise<QuotationItem[]> {
     const customerName = (quotation.customerName || '').trim();
     if (!customerName || !items.length) return items.map((item) => ({ ...item, historicalDdpQuoteUsd: null }));
@@ -208,6 +232,7 @@ export class QuotationService {
 
 function quotationListRow(quotation: Quotation) {
   return {
+    contractingEntity: quotation.contractingEntityName || '未设置',
     报价单号: quotation.quotationNo,
     客户: quotation.customerName || '',
     项目名称: quotation.remark || '',
@@ -223,6 +248,7 @@ function quotationListRow(quotation: Quotation) {
 
 function quotationParamRows(quotation: Quotation) {
   const fields: Array<[keyof Quotation, string]> = [
+    ['contractingEntityName', '承接单位'],
     ['exchangeRateUsd', 'USD汇率'],
     ['exchangeRateMxn', '比索兑美元汇率'],
     ['capitalCostRate', '资金成本率(%)'],

@@ -53,7 +53,7 @@ export function formalQuotationInputFromSaved(
 ): FormalQuotationExportInput {
   return {
     quotationNo: quotation.quotationNo,
-    quoteCompany: DEFAULT_COMPANY,
+    quoteCompany: quotation.contractingEntityName || DEFAULT_COMPANY,
     quoteTarget: quotation.customerName || '',
     contactName,
     quoteDate: formatDate(quotation.createdAt),

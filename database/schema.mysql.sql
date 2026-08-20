@@ -43,13 +43,203 @@ CREATE TABLE IF NOT EXISTS `tariff_rates` (
 
 CREATE TABLE IF NOT EXISTS `customers` (
   `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `customerCode` VARCHAR(100) NULL,
   `name` VARCHAR(255) NOT NULL UNIQUE,
+  `nameCn` VARCHAR(255) NULL,
+  `nameEn` VARCHAR(255) NULL,
+  `shortName` VARCHAR(255) NULL,
+  `taxNumber` VARCHAR(100) NULL,
+  `country` VARCHAR(100) NULL,
   `address` TEXT NULL,
+  `postalCode` VARCHAR(50) NULL,
+  `contactName` VARCHAR(255) NULL,
+  `contactPhone` VARCHAR(100) NULL,
+  `contactEmail` VARCHAR(255) NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customers_keyword` (`name`, `nameCn`, `nameEn`, `shortName`, `contactName`, `contactPhone`),
+  UNIQUE KEY `uniq_customers_customer_code` (`customerCode`)
+);
+
+CREATE TABLE IF NOT EXISTS `customer_bank_accounts` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `customerId` CHAR(36) NOT NULL,
+  `accountName` VARCHAR(255) NULL,
+  `bankName` VARCHAR(255) NULL,
+  `bankAccount` VARCHAR(255) NULL,
+  `bankRoutingNumber` VARCHAR(100) NULL,
+  `swiftCode` VARCHAR(100) NULL,
+  `currency` VARCHAR(20) NOT NULL DEFAULT 'USD',
+  `otherCurrency` VARCHAR(50) NULL,
+  `bankAddress` TEXT NULL,
+  `sortOrder` INT NOT NULL DEFAULT 1,
+  `isDefault` TINYINT(1) NOT NULL DEFAULT 0,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customer_bank_accounts_customer` (`customerId`, `sortOrder`)
+);
+
+CREATE TABLE IF NOT EXISTS `customer_contacts` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `customerId` CHAR(36) NOT NULL,
+  `name` VARCHAR(255) NULL,
+  `phone` VARCHAR(100) NULL,
+  `email` VARCHAR(255) NULL,
+  `sortOrder` INT NOT NULL DEFAULT 1,
+  `isPrimary` TINYINT(1) NOT NULL DEFAULT 0,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customer_contacts_customer` (`customerId`, `sortOrder`)
+);
+
+CREATE TABLE IF NOT EXISTS `customer_attachments` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `customerId` CHAR(36) NOT NULL,
+  `fileName` VARCHAR(255) NOT NULL,
+  `fileType` VARCHAR(120) NULL,
+  `fileSize` DECIMAL(14,4) NOT NULL DEFAULT 0,
+  `dataUrl` LONGTEXT NOT NULL,
+  `uploadedAt` VARCHAR(32) NOT NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_customer_attachments_customer` (`customerId`, `uploadedAt`)
+);
+
+CREATE TABLE IF NOT EXISTS `suppliers` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `supplierCode` VARCHAR(100) NOT NULL,
+  `nameCn` VARCHAR(255) NOT NULL,
+  `nameEn` VARCHAR(255) NULL,
+  `shortName` VARCHAR(255) NULL,
+  `country` VARCHAR(100) NULL,
+  `city` VARCHAR(100) NULL,
+  `registeredAddress` TEXT NULL,
+  `taxNumber` VARCHAR(100) NULL,
+  `supplierType` VARCHAR(30) NOT NULL DEFAULT 'third_party',
+  `supplyCategories` TEXT NULL,
+  `brands` TEXT NULL,
+  `cooperationStatus` VARCHAR(30) NOT NULL DEFAULT 'not_cooperated',
+  `website` VARCHAR(500) NULL,
+  `remark` TEXT NULL,
+  `contactName` VARCHAR(255) NULL,
+  `contactPhone` VARCHAR(100) NULL,
+  `contactEmail` VARCHAR(255) NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  UNIQUE KEY `uniq_suppliers_supplier_code` (`supplierCode`),
+  UNIQUE KEY `uniq_suppliers_name_cn` (`nameCn`),
+  INDEX `idx_suppliers_keyword` (`supplierCode`, `nameCn`, `shortName`, `country`),
+  INDEX `idx_suppliers_status` (`cooperationStatus`)
+);
+
+CREATE TABLE IF NOT EXISTS `contracting_entities` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `entityCode` VARCHAR(100) NOT NULL,
+  `entityName` VARCHAR(255) NOT NULL,
+  `nameCn` VARCHAR(255) NULL,
+  `nameEn` VARCHAR(255) NULL,
+  `shortName` VARCHAR(255) NULL,
+  `country` VARCHAR(100) NULL,
+  `city` VARCHAR(100) NULL,
+  `registeredAddress` TEXT NULL,
+  `taxNumber` VARCHAR(100) NULL,
+  `address` TEXT NULL,
+  `remark` TEXT NULL,
+  `bankAccount` VARCHAR(255) NULL,
   `contactName` VARCHAR(255) NULL,
   `contactPhone` VARCHAR(100) NULL,
   `createdAt` VARCHAR(32) NOT NULL,
   `updatedAt` VARCHAR(32) NOT NULL,
-  INDEX `idx_customers_keyword` (`name`, `contactName`, `contactPhone`)
+  UNIQUE KEY `uniq_contracting_entities_code` (`entityCode`),
+  UNIQUE KEY `uniq_contracting_entities_name` (`entityName`)
+);
+
+CREATE TABLE IF NOT EXISTS `contracting_entity_bank_accounts` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `entityId` CHAR(36) NOT NULL,
+  `accountName` VARCHAR(255) NULL,
+  `bankName` VARCHAR(255) NULL,
+  `bankAccount` VARCHAR(255) NULL,
+  `bankRoutingNumber` VARCHAR(100) NULL,
+  `swiftCode` VARCHAR(100) NULL,
+  `currency` VARCHAR(50) NULL,
+  `bankAddress` TEXT NULL,
+  `sortOrder` INT NOT NULL DEFAULT 1,
+  `isDefault` TINYINT(1) NOT NULL DEFAULT 0,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_contracting_entity_bank_accounts_entity` (`entityId`, `sortOrder`)
+);
+
+CREATE TABLE IF NOT EXISTS `contracting_entity_contacts` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `entityId` CHAR(36) NOT NULL,
+  `name` VARCHAR(255) NULL,
+  `title` VARCHAR(255) NULL,
+  `phone` VARCHAR(100) NULL,
+  `email` VARCHAR(255) NULL,
+  `sortOrder` INT NOT NULL DEFAULT 1,
+  `isPrimary` TINYINT(1) NOT NULL DEFAULT 0,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_contracting_entity_contacts_entity` (`entityId`, `sortOrder`)
+);
+
+CREATE TABLE IF NOT EXISTS `contracting_entity_attachments` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `entityId` CHAR(36) NOT NULL,
+  `fileName` VARCHAR(255) NOT NULL,
+  `fileType` VARCHAR(120) NULL,
+  `fileSize` DECIMAL(14,4) NOT NULL DEFAULT 0,
+  `dataUrl` LONGTEXT NOT NULL,
+  `uploadedAt` VARCHAR(32) NOT NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_contracting_entity_attachments_entity` (`entityId`, `uploadedAt`)
+);
+
+CREATE TABLE IF NOT EXISTS `supplier_bank_accounts` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `supplierId` CHAR(36) NOT NULL,
+  `accountName` VARCHAR(255) NULL,
+  `bankName` VARCHAR(255) NULL,
+  `bankAccount` VARCHAR(255) NULL,
+  `bankRoutingNumber` VARCHAR(100) NULL,
+  `swiftCode` VARCHAR(100) NULL,
+  `currency` VARCHAR(50) NOT NULL DEFAULT 'USD',
+  `bankAddress` TEXT NULL,
+  `sortOrder` INT NOT NULL DEFAULT 1,
+  `isDefault` TINYINT(1) NOT NULL DEFAULT 0,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_supplier_bank_accounts_supplier` (`supplierId`, `sortOrder`)
+);
+
+CREATE TABLE IF NOT EXISTS `supplier_contacts` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `supplierId` CHAR(36) NOT NULL,
+  `name` VARCHAR(255) NULL,
+  `title` VARCHAR(255) NULL,
+  `phone` VARCHAR(100) NULL,
+  `email` VARCHAR(255) NULL,
+  `sortOrder` INT NOT NULL DEFAULT 1,
+  `isPrimary` TINYINT(1) NOT NULL DEFAULT 0,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_supplier_contacts_supplier` (`supplierId`, `sortOrder`)
+);
+
+CREATE TABLE IF NOT EXISTS `supplier_attachments` (
+  `id` CHAR(36) NOT NULL PRIMARY KEY,
+  `supplierId` CHAR(36) NOT NULL,
+  `fileName` VARCHAR(255) NOT NULL,
+  `fileType` VARCHAR(120) NULL,
+  `fileSize` DECIMAL(14,4) NOT NULL DEFAULT 0,
+  `dataUrl` LONGTEXT NOT NULL,
+  `uploadedAt` VARCHAR(32) NOT NULL,
+  `createdAt` VARCHAR(32) NOT NULL,
+  `updatedAt` VARCHAR(32) NOT NULL,
+  INDEX `idx_supplier_attachments_supplier` (`supplierId`, `uploadedAt`)
 );
 
 CREATE TABLE IF NOT EXISTS `history_quotations` (
@@ -94,6 +284,8 @@ CREATE TABLE IF NOT EXISTS `quotations` (
   `status` VARCHAR(20) NOT NULL DEFAULT 'draft',
   `customerId` CHAR(36) NULL,
   `customerName` VARCHAR(255) NULL,
+  `contractingEntityId` CHAR(36) NULL,
+  `contractingEntityName` VARCHAR(255) NULL,
   `remark` TEXT NULL,
   `sourceType` VARCHAR(30) NULL,
   `sourcePoId` CHAR(36) NULL,
@@ -148,6 +340,8 @@ CREATE TABLE IF NOT EXISTS `settlement_projects` (
   `quotationId` CHAR(36) NOT NULL UNIQUE,
   `quotationNo` VARCHAR(100) NOT NULL,
   `customerName` VARCHAR(255) NULL,
+  `contractingEntityId` CHAR(36) NULL,
+  `contractingEntityName` VARCHAR(255) NULL,
   `remark` TEXT NULL,
   `exchangeRateUsd` DECIMAL(14,4) NOT NULL DEFAULT 0,
   `exchangeRateMxn` DECIMAL(14,4) NOT NULL DEFAULT 0,
@@ -227,6 +421,7 @@ CREATE TABLE IF NOT EXISTS `settlement_invoices` (
   `projectId` CHAR(36) NOT NULL,
   `type` VARCHAR(20) NOT NULL DEFAULT 'cost',
   `accountPeriod` VARCHAR(100) NULL,
+  `accountingDate` VARCHAR(32) NULL,
   `companyEntity` VARCHAR(255) NULL,
   `invoiceEntity` VARCHAR(255) NULL,
   `invoiceDate` VARCHAR(32) NULL,

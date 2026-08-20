@@ -1,11 +1,24 @@
 import type {
   CreateQuotationDto,
   CreateCustomerPoDto,
+  CreateCustomerDto,
   CreateSettlementAttachmentDto,
   CreateSettlementExpenseDto,
   CreateSettlementInvoiceDto,
   CreateSettlementSaleDto,
   Customer,
+  CustomerAttachment,
+  CustomerBankAccount,
+  CustomerContact,
+  CustomerDetail,
+  CreateSupplierDto,
+  ContractingEntity,
+  ContractingEntityAttachment,
+  ContractingEntityBankAccount,
+  ContractingEntityContact,
+  ContractingEntityDetail,
+  CreateContractingEntityDto,
+  UpdateContractingEntityDto,
   CustomerPo,
   CustomerPoDetail,
   FinanceInvoiceRow,
@@ -16,6 +29,7 @@ import type {
   Product,
   Quotation,
   QuotationDetail,
+  QuotationDetailPage,
   SettlementCurrency,
   SettlementExpense,
   SettlementItem,
@@ -23,12 +37,19 @@ import type {
   SettlementOrderDto,
   SettlementProject,
   SettlementProjectDetail,
+  SettlementProjectDetailPage,
   SettlementSale,
+  Supplier,
+  SupplierAttachment,
+  SupplierBankAccount,
+  SupplierContact,
+  SupplierDetail,
   TariffRate,
   UpdateSettlementExpenseDto,
   UpdateSettlementInvoiceDto,
   UpdateSettlementItemDto,
   UpdateSettlementSaleDto,
+  UpdateCustomerDto,
 } from '../../shared/api.interface.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -50,6 +71,10 @@ export async function apiWrite<T>(path: string, method: 'POST' | 'PUT' | 'DELETE
 }
 
 export async function upload(path: string, file: File): Promise<{ imported: number; errors: string[] }> {
+  return uploadFile<{ imported: number; errors: string[] }>(path, file);
+}
+
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append('file', file);
   const response = await fetch(`/api${path}`, {
@@ -85,6 +110,8 @@ export type TariffPage = PageResult<TariffRate>;
 export type QuotationPage = PageResult<Quotation>;
 export type HistoryPage = PageResult<HistoryQuotation>;
 export type CustomerPage = PageResult<Customer>;
+export type SupplierPage = PageResult<Supplier>;
+export type ContractingEntityPage = PageResult<ContractingEntity>;
 export type CustomerPoPage = PageResult<CustomerPo>;
 export type SettlementProjectPage = PageResult<SettlementProject>;
 export type FinanceInvoicePage = PageResult<FinanceInvoiceRow>;
@@ -94,9 +121,16 @@ export type {
   HistoryQuotation,
   Quotation,
   QuotationDetail,
+  QuotationDetailPage,
   CreateQuotationDto,
   CreateCustomerPoDto,
+  CreateCustomerDto,
   Customer,
+  CustomerAttachment,
+  CustomerBankAccount,
+  CustomerContact,
+  CustomerDetail,
+  CreateSupplierDto,
   CustomerPo,
   CustomerPoDetail,
   FinanceInvoiceRow,
@@ -109,7 +143,13 @@ export type {
   SettlementOrderDto,
   SettlementProject,
   SettlementProjectDetail,
+  SettlementProjectDetailPage,
   SettlementSale,
+  Supplier,
+  SupplierAttachment,
+  SupplierBankAccount,
+  SupplierContact,
+  SupplierDetail,
   CreateSettlementAttachmentDto,
   CreateSettlementExpenseDto,
   CreateSettlementInvoiceDto,
@@ -118,4 +158,12 @@ export type {
   UpdateSettlementInvoiceDto,
   UpdateSettlementItemDto,
   UpdateSettlementSaleDto,
+  UpdateCustomerDto,
+  ContractingEntity,
+  ContractingEntityAttachment,
+  ContractingEntityBankAccount,
+  ContractingEntityContact,
+  ContractingEntityDetail,
+  CreateContractingEntityDto,
+  UpdateContractingEntityDto,
 };

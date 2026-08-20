@@ -1,9 +1,11 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { apiGet, apiWrite, download } from '../api.js';
 import FeedbackDialog from '../components/FeedbackDialog.js';
+import DetailBackButton from '../components/DetailBackButton.js';
 import LinkedNumber from '../components/LinkedNumber.js';
 import { calculateSettlementPurchaseAmounts, summarizeSettlementOrderItems } from './settlement-purchase-amount.js';
+import { formatMoney } from '../utils/display.js';
 import type {
   CreateSettlementExpenseDto,
   CreateSettlementInvoiceDto,
@@ -13,6 +15,7 @@ import type {
   SettlementItem,
   SettlementOrderDto,
   SettlementProjectDetail,
+  SettlementProjectDetailPage,
   UpdateSettlementExpenseDto,
   UpdateSettlementInvoiceDto,
   UpdateSettlementItemDto,
@@ -46,10 +49,21 @@ type AttachmentUploadProgress = {
   status: 'uploading' | 'done';
 };
 
+type DetailPageSection = 'unpurchased' | 'purchased' | 'expenses' | 'sales' | 'invoices' | 'attachments';
+
 export default function SettlementProjectDetailPage() {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number][0]>('detail');
-  const [detail, setDetail] = useState<SettlementProjectDetail | null>(null);
+  const [detail, setDetail] = useState<SettlementProjectDetailPage | null>(null);
+  const [detailPages, setDetailPages] = useState({
+    unpurchased: 1,
+    purchased: 1,
+    expenses: 1,
+    sales: 1,
+    invoices: 1,
+    attachments: 1,
+  });
+  const detailPageSize = 10;
   const [draftItems, setDraftItems] = useState<SettlementItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
@@ -84,6 +98,7 @@ export default function SettlementProjectDetailPage() {
   const [invoiceDraft, setInvoiceDraft] = useState<CreateSettlementInvoiceDto>({
     type: 'cost',
     accountPeriod: '',
+    accountingDate: '',
     companyEntity: '',
     invoiceEntity: '',
     invoiceDate: '',
@@ -102,11 +117,29 @@ export default function SettlementProjectDetailPage() {
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [attachmentUploadProgress, setAttachmentUploadProgress] = useState<AttachmentUploadProgress | null>(null);
 
-  async function load() {
+  async function load(nextPages = detailPages) {
     if (!id) return;
-    const result = await apiGet<SettlementProjectDetail>(`/settlement-projects/${id}`);
+    const params = new URLSearchParams({
+      itemsPage: '1',
+      unpurchasedPage: String(nextPages.unpurchased),
+      purchasedPage: String(nextPages.purchased),
+      expensesPage: String(nextPages.expenses),
+      salesPage: String(nextPages.sales),
+      invoicesPage: String(nextPages.invoices),
+      attachmentsPage: String(nextPages.attachments),
+      pageSize: String(detailPageSize),
+    });
+    const result = await apiGet<SettlementProjectDetailPage>(`/settlement-projects/${id}?${params}`);
     setDetail(result);
-    setDraftItems(result.unpurchasedItems);
+    setDetailPages({
+      unpurchased: result.unpurchasedItems.page,
+      purchased: result.purchasedItems.page,
+      expenses: result.expenses.page,
+      sales: result.sales.page,
+      invoices: result.invoices.page,
+      attachments: result.attachments.page,
+    });
+    setDraftItems(result.unpurchasedItems.items);
     setEditableDrafts(result);
     setSelectedIds([]);
     setShowOrderConfirm(false);
@@ -181,6 +214,7 @@ export default function SettlementProjectDetailPage() {
     setInvoiceDraft({
       ...invoiceDraft,
       accountPeriod: '',
+      accountingDate: '',
       companyEntity: '',
       invoiceEntity: '',
       invoiceDate: '',
@@ -229,8 +263,7 @@ export default function SettlementProjectDetailPage() {
         const percent = chunks.length ? Math.round(((index + 1) / chunks.length) * 90) + 5 : 95;
         setAttachmentUploadProgress((current) => current ? { ...current, percent: Math.min(percent, 95) } : current);
       }
-      const result = await apiGet<SettlementProjectDetail>(`/settlement-projects/${id}`);
-      applyDetail(result);
+      await load();
       setAttachmentUploadProgress((current) => current ? { ...current, percent: 100, status: 'done' } : current);
       setAttachmentDescription('');
     } catch (err) {
@@ -254,17 +287,15 @@ export default function SettlementProjectDetailPage() {
     applyDetail(result);
   }
 
-  function applyDetail(result: SettlementProjectDetail) {
-    setDetail(result);
-    setDraftItems(result.unpurchasedItems);
-    setEditableDrafts(result);
+  function applyDetail(_result: SettlementProjectDetail) {
+    void load();
   }
 
-  function setEditableDrafts(result: SettlementProjectDetail) {
-    setPurchasedDrafts(Object.fromEntries(result.purchasedItems.map((item) => [item.id, settlementItemDraft(item)])));
-    setExpenseDrafts(Object.fromEntries(result.expenses.map((expense) => [expense.id, settlementExpenseDraft(expense)])));
-    setSaleDrafts(Object.fromEntries(result.sales.map((sale) => [sale.id, settlementSaleDraft(sale)])));
-    setInvoiceDrafts(Object.fromEntries(result.invoices.map((invoice) => [invoice.id, settlementInvoiceDraft(invoice)])));
+  function setEditableDrafts(result: SettlementProjectDetailPage) {
+    setPurchasedDrafts(Object.fromEntries(result.purchasedItems.items.map((item) => [item.id, settlementItemDraft(item)])));
+    setExpenseDrafts(Object.fromEntries(result.expenses.items.map((expense) => [expense.id, settlementExpenseDraft(expense)])));
+    setSaleDrafts(Object.fromEntries(result.sales.items.map((sale) => [sale.id, settlementSaleDraft(sale)])));
+    setInvoiceDrafts(Object.fromEntries(result.invoices.items.map((invoice) => [invoice.id, settlementInvoiceDraft(invoice)])));
   }
 
   function toggleEditingPurchased(itemId: string, editing: boolean) {
@@ -365,6 +396,12 @@ export default function SettlementProjectDetailPage() {
     setDraftItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
   }
 
+  function changeDetailPage(section: DetailPageSection, nextPage: number) {
+    const nextPages = { ...detailPages, [section]: Math.max(1, nextPage) };
+    setDetailPages(nextPages);
+    void load(nextPages).catch((err) => setError(err instanceof Error ? err.message : '加载分页数据失败'));
+  }
+
   if (!detail) {
     return (
       <section>
@@ -379,18 +416,26 @@ export default function SettlementProjectDetailPage() {
     );
   }
 
-  const { project, purchasedItems } = detail;
+  const { project } = detail;
+  const purchasedItems = detail.purchasedItems.items;
+  const expenses = detail.expenses.items;
+  const sales = detail.sales.items;
+  const invoices = detail.invoices.items;
+  const attachments = detail.attachments.items;
   const unpurchasedTotals = settlementItemTotals(draftItems, project.exchangeRateUsd, project.exchangeRateMxn);
   const purchasedTotals = settlementItemTotals(purchasedItems, project.exchangeRateUsd, project.exchangeRateMxn);
-  const expenseTotals = settlementEntryTotals(detail.expenses, project.exchangeRateUsd, project.exchangeRateMxn);
-  const saleTotals = settlementEntryTotals(detail.sales, project.exchangeRateUsd, project.exchangeRateMxn);
+  const expenseTotals = settlementEntryTotals(expenses, project.exchangeRateUsd, project.exchangeRateMxn);
+  const saleTotals = settlementEntryTotals(sales, project.exchangeRateUsd, project.exchangeRateMxn);
 
   return (
     <section>
       <header className="page-header">
-        <div>
+        <div className="detail-heading-group">
+          <DetailBackButton to="/settlement-projects" label="返回项目结算列表" />
+          <div>
           <h1>项目结算</h1>
-            <p><strong className="project-number">{project.projectNo}</strong>{' / '}<LinkedNumber to={`/quotation/detail/${project.quotationId}`}>{project.quotationNo}</LinkedNumber>{' / '}{project.customerName || '-'}</p>
+            <p><strong className="project-number">{project.projectNo}</strong>{' / '}<LinkedNumber to={`/quotation/detail/${project.quotationId}`}>{project.quotationNo}</LinkedNumber>{' / '}{project.customerName || '-'} / 承接单位：{project.contractingEntityName || '未设置'}</p>
+          </div>
         </div>
         <div className="toolbar">
           {project.status === 'completed' ? (
@@ -399,7 +444,6 @@ export default function SettlementProjectDetailPage() {
             <button className="primary-action" type="button" onClick={completeProject}>项目完结</button>
           )}
           <button type="button" onClick={() => download(`/settlement-projects/${project.id}/export`)}>导出</button>
-          <Link className="button-link" to="/settlement-projects">返回列表</Link>
         </div>
       </header>
       <FeedbackDialog message={error} onClose={() => setError('')} />
@@ -520,6 +564,7 @@ export default function SettlementProjectDetailPage() {
                 )}
               </table>
             </div>
+            <DetailPagination page={detail.unpurchasedItems.page} total={detail.unpurchasedItems.total} onChange={(page) => changeDetailPage('unpurchased', page)} />
           </div>
           <div className="panel">
             <h2>已采购商品</h2>
@@ -611,6 +656,7 @@ export default function SettlementProjectDetailPage() {
                 )}
               </table>
             </div>
+            <DetailPagination page={detail.purchasedItems.page} total={detail.purchasedItems.total} onChange={(page) => changeDetailPage('purchased', page)} />
             <div className="section-heading sub-section">
               <h2>其他成本费用</h2>
               <button type="button" onClick={() => setShowExpenseForm((value) => !value)}>添加费用</button>
@@ -671,7 +717,7 @@ export default function SettlementProjectDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detail.expenses.map((expense) => {
+                  {expenses.map((expense) => {
                     const draft = expenseDrafts[expense.id] || settlementExpenseDraft(expense);
                     const isEditing = editingExpenseIds.includes(expense.id);
                     const amounts = settlementAmountBreakdown(draft, project.exchangeRateUsd, project.exchangeRateMxn);
@@ -709,13 +755,13 @@ export default function SettlementProjectDetailPage() {
                       </tr>
                     );
                   })}
-                  {!detail.expenses.length && (
+                  {!expenses.length && (
                     <tr>
                       <td colSpan={10} className="empty-cell">暂无其他成本费用</td>
                     </tr>
                   )}
                 </tbody>
-                {Boolean(detail.expenses.length) && (
+                {Boolean(expenses.length) && (
                   <tfoot>
                     <tr>
                       <td>合计</td>
@@ -733,6 +779,7 @@ export default function SettlementProjectDetailPage() {
                 )}
               </table>
             </div>
+            <DetailPagination page={detail.expenses.page} total={detail.expenses.total} onChange={(page) => changeDetailPage('expenses', page)} />
             <div className="section-heading sub-section">
               <h2>销售收入明细</h2>
               <button type="button" onClick={() => setShowSaleForm((value) => !value)}>新增</button>
@@ -791,7 +838,7 @@ export default function SettlementProjectDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detail.sales.map((sale) => {
+                  {sales.map((sale) => {
                     const draft = saleDrafts[sale.id] || settlementSaleDraft(sale);
                     const isEditing = editingSaleIds.includes(sale.id);
                     const amounts = settlementAmountBreakdown(draft, project.exchangeRateUsd, project.exchangeRateMxn);
@@ -825,13 +872,13 @@ export default function SettlementProjectDetailPage() {
                       </tr>
                     );
                   })}
-                  {!detail.sales.length && (
+                  {!sales.length && (
                     <tr>
                       <td colSpan={10} className="empty-cell">暂无销售收入明细</td>
                     </tr>
                   )}
                 </tbody>
-                {Boolean(detail.sales.length) && (
+                {Boolean(sales.length) && (
                   <tfoot>
                     <tr>
                       <td>合计</td>
@@ -849,6 +896,7 @@ export default function SettlementProjectDetailPage() {
                 )}
               </table>
             </div>
+            <DetailPagination page={detail.sales.page} total={detail.sales.total} onChange={(page) => changeDetailPage('sales', page)} />
           </div>
         </>
       )}
@@ -864,8 +912,11 @@ export default function SettlementProjectDetailPage() {
           onRowEdit={(invoiceId) => toggleEditingInvoice(invoiceId, true)}
           onRowSave={saveInvoice}
           onPaidToggle={toggleInvoicePaid}
-          onRowDelete={deleteInvoice}
-        />
+           onRowDelete={deleteInvoice}
+          page={detail.invoices.page}
+          total={detail.invoices.total}
+          onPageChange={(page) => changeDetailPage('invoices', page)}
+         />
       )}
       {activeTab === 'attachments' && (
         <AttachmentManagement
@@ -875,8 +926,11 @@ export default function SettlementProjectDetailPage() {
           uploading={uploadingAttachment}
           onDescriptionChange={setAttachmentDescription}
           onUpload={uploadAttachment}
-          onDelete={deleteAttachment}
-        />
+           onDelete={deleteAttachment}
+          page={detail.attachments.page}
+          total={detail.attachments.total}
+          onPageChange={(page) => changeDetailPage('attachments', page)}
+         />
       )}
       {activeTab === 'detail' && selectedItems.length ? (
         <OrderFloatingSummary
@@ -913,8 +967,11 @@ function InvoiceManagement({
   onRowSave,
   onPaidToggle,
   onRowDelete,
+  page,
+  total,
+  onPageChange,
 }: {
-  detail: SettlementProjectDetail;
+  detail: SettlementProjectDetailPage;
   draft: CreateSettlementInvoiceDto;
   drafts: Record<string, UpdateSettlementInvoiceDto>;
   editingIds: string[];
@@ -925,8 +982,12 @@ function InvoiceManagement({
   onRowSave: (invoiceId: string) => void;
   onPaidToggle: (invoiceId: string, isPaid: boolean) => void;
   onRowDelete: (invoiceId: string) => void;
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
 }) {
   const calculated = calculateInvoiceAmounts(draft);
+  const invoices = detail.invoices.items;
   return (
     <div className="panel">
       <div className="section-heading">
@@ -944,6 +1005,10 @@ function InvoiceManagement({
         <label>
           <span>账期</span>
           <input type="date" value={draft.accountPeriod || ''} onChange={(event) => onDraftChange({ ...draft, accountPeriod: event.target.value })} />
+        </label>
+        <label>
+          <span>财务记账日期</span>
+          <input type="date" value={draft.accountingDate || ''} onChange={(event) => onDraftChange({ ...draft, accountingDate: event.target.value })} />
         </label>
         <label>
           <span>公司主体</span>
@@ -1002,6 +1067,7 @@ function InvoiceManagement({
             <tr>
               <th className="invoice-type-col">类型</th>
               <th>账期</th>
+              <th>财务记账日期</th>
               <th>公司主体</th>
               <th>发票主体</th>
               <th>发票日期</th>
@@ -1018,7 +1084,7 @@ function InvoiceManagement({
             </tr>
           </thead>
           <tbody>
-            {detail.invoices.map((invoice) => {
+            {invoices.map((invoice) => {
               const isEditing = editingIds.includes(invoice.id);
               const rowDraft = drafts[invoice.id] || settlementInvoiceDraft(invoice);
               const rowCalculated = calculateInvoiceAmounts(rowDraft);
@@ -1031,6 +1097,7 @@ function InvoiceManagement({
                     </select>
                   ) : invoiceTypeLabel(invoice.type)}</td>
                   <td>{isEditing ? <input type="date" value={rowDraft.accountPeriod || ''} onChange={(event) => onRowDraftChange(invoice.id, { accountPeriod: event.target.value })} /> : invoice.accountPeriod || '-'}</td>
+                  <td>{isEditing ? <input type="date" value={rowDraft.accountingDate || ''} onChange={(event) => onRowDraftChange(invoice.id, { accountingDate: event.target.value })} /> : invoice.accountingDate || '-'}</td>
                   <td>{isEditing ? <input value={rowDraft.companyEntity || ''} onChange={(event) => onRowDraftChange(invoice.id, { companyEntity: event.target.value })} /> : invoice.companyEntity || '-'}</td>
                   <td>{isEditing ? <input value={rowDraft.invoiceEntity || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceEntity: event.target.value })} /> : invoice.invoiceEntity || '-'}</td>
                   <td>{isEditing ? <input type="date" value={rowDraft.invoiceDate || ''} onChange={(event) => onRowDraftChange(invoice.id, { invoiceDate: event.target.value })} /> : invoice.invoiceDate || '-'}</td>
@@ -1066,9 +1133,9 @@ function InvoiceManagement({
                 </tr>
               );
             })}
-            {!detail.invoices.length && (
+            {!invoices.length && (
               <tr>
-                <td colSpan={14} className="empty-cell">暂无发票明细</td>
+                <td colSpan={15} className="empty-cell">暂无发票明细</td>
               </tr>
             )}
           </tbody>
@@ -1105,6 +1172,7 @@ function OrderFloatingSummary({
           {ordering ? "\u4e0b\u5355\u4e2d..." : "\u786e\u8ba4\u4e0b\u5355"}
         </button>
       </div>
+      <DetailPagination page={page} total={total} onChange={onPageChange} />
     </div>
   );
 }
@@ -1206,15 +1274,22 @@ function AttachmentManagement({
   onDescriptionChange,
   onUpload,
   onDelete,
+  page,
+  total,
+  onPageChange,
 }: {
-  detail: SettlementProjectDetail;
+  detail: SettlementProjectDetailPage;
   description: string;
   progress: AttachmentUploadProgress | null;
   uploading: boolean;
   onDescriptionChange: (value: string) => void;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onDelete: (attachmentId: string) => void;
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
 }) {
+  const attachments = detail.attachments.items;
   return (
     <div className="panel">
       <div className="section-heading">
@@ -1273,7 +1348,7 @@ function AttachmentManagement({
                 </td>
               </tr>
             )}
-            {detail.attachments.map((attachment) => (
+            {attachments.map((attachment) => (
               <tr key={attachment.id}>
                 <td>{attachment.fileName}</td>
                 <td>{attachment.fileType || '-'}</td>
@@ -1286,13 +1361,28 @@ function AttachmentManagement({
                 </td>
               </tr>
             ))}
-            {!detail.attachments.length && !progress && (
+            {!attachments.length && !progress && (
               <tr>
                 <td colSpan={6} className="empty-cell">暂无附件</td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+      <DetailPagination page={page} total={total} onChange={onPageChange} />
+    </div>
+  );
+}
+
+function DetailPagination({ page, total, onChange }: { page: number; total: number; onChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(total / 10));
+  return (
+    <div className="pagination-bar detail-pagination">
+      <span>共 {total} 条</span>
+      <div className="pagination-actions">
+        <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>上一页</button>
+        <span>第 {page} / {totalPages} 页</span>
+        <button type="button" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>下一页</button>
       </div>
     </div>
   );
@@ -1425,6 +1515,7 @@ function settlementSaleDraft(sale: {
 function settlementInvoiceDraft(invoice: {
   type: SettlementInvoiceType;
   accountPeriod?: string;
+  accountingDate?: string;
   companyEntity?: string;
   invoiceEntity?: string;
   invoiceDate?: string;
@@ -1440,6 +1531,7 @@ function settlementInvoiceDraft(invoice: {
   return {
     type: invoice.type,
     accountPeriod: invoice.accountPeriod || '',
+    accountingDate: invoice.accountingDate || '',
     companyEntity: invoice.companyEntity || '',
     invoiceEntity: invoice.invoiceEntity || '',
     invoiceDate: invoice.invoiceDate || '',
@@ -1535,7 +1627,7 @@ function invoiceTypeLabel(type: SettlementInvoiceType) {
 }
 
 function money(value = 0) {
-  return Number(value || 0).toFixed(2);
+  return formatMoney(value);
 }
 
 function integer(value = 0) {

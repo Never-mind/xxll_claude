@@ -54,13 +54,315 @@ export interface TariffRate {
 
 export interface Customer {
   id: string;
+  customerCode?: string;
+  nameCn?: string;
+  nameEn?: string;
+  shortName?: string;
   name: string;
+  taxNumber?: string;
+  country?: string;
   address?: string;
+  postalCode?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CustomerBankCurrency = 'CNY' | 'USD' | 'BRL' | 'CLP' | 'MXN' | 'OTHER';
+
+export interface CustomerBankAccount {
+  id: string;
+  customerId: string;
+  accountName?: string;
+  bankName: string;
+  bankAccount: string;
+  bankRoutingNumber?: string;
+  swiftCode?: string;
+  currency: CustomerBankCurrency;
+  otherCurrency?: string;
+  bankAddress?: string;
+  sortOrder: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerContact {
+  id: string;
+  customerId: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerAttachment {
+  id: string;
+  customerId: string;
+  fileName: string;
+  fileType?: string;
+  fileSize: number;
+  dataUrl?: string;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerDetail {
+  customer: Customer;
+  bankAccounts: CustomerBankAccount[];
+  contacts: CustomerContact[];
+  attachments: CustomerAttachment[];
+}
+
+export interface CreateCustomerBankAccountDto {
+  accountName?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankRoutingNumber?: string;
+  swiftCode?: string;
+  currency?: CustomerBankCurrency;
+  otherCurrency?: string;
+  bankAddress?: string;
+  isDefault?: boolean;
+}
+
+export interface CreateCustomerContactDto {
+  name?: string;
+  phone?: string;
+  email?: string;
+  isPrimary?: boolean;
+}
+
+export interface CreateCustomerDto {
+  customerCode?: string;
+  nameCn?: string;
+  nameEn?: string;
+  shortName?: string;
+  name: string;
+  taxNumber?: string;
+  country?: string;
+  address?: string;
+  postalCode?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  bankAccounts?: CreateCustomerBankAccountDto[];
+  contacts?: CreateCustomerContactDto[];
+}
+
+export interface UpdateCustomerDto extends Partial<CreateCustomerDto> {}
+
+export type SupplierType = 'manufacturer' | 'agent' | 'integrator' | 'third_party';
+export type SupplierCooperationStatus = 'normal' | 'suspended' | 'terminated' | 'not_cooperated';
+
+export interface Supplier {
+  id: string;
+  supplierCode: string;
+  nameCn: string;
+  nameEn?: string;
+  shortName?: string;
+  country?: string;
+  city?: string;
+  registeredAddress?: string;
+  taxNumber?: string;
+  supplierType: SupplierType;
+  supplyCategories: string[];
+  brands: string[];
+  cooperationStatus: SupplierCooperationStatus;
+  website?: string;
+  remark?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierBankAccount {
+  id: string;
+  supplierId: string;
+  accountName?: string;
+  bankName: string;
+  bankAccount: string;
+  bankRoutingNumber?: string;
+  swiftCode?: string;
+  currency: string;
+  bankAddress?: string;
+  sortOrder: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierContact {
+  id: string;
+  supplierId: string;
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierAttachment {
+  id: string;
+  supplierId: string;
+  fileName: string;
+  fileType?: string;
+  fileSize: number;
+  dataUrl?: string;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierDetail {
+  supplier: Supplier;
+  bankAccounts: SupplierBankAccount[];
+  contacts: SupplierContact[];
+  attachments: SupplierAttachment[];
+}
+
+export interface CreateSupplierBankAccountDto {
+  accountName?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankRoutingNumber?: string;
+  swiftCode?: string;
+  currency?: string;
+  bankAddress?: string;
+  isDefault?: boolean;
+}
+
+export interface CreateSupplierContactDto {
+  name?: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  isPrimary?: boolean;
+}
+
+export interface CreateSupplierDto {
+  supplierCode?: string;
+  nameCn: string;
+  nameEn?: string;
+  shortName?: string;
+  country?: string;
+  city?: string;
+  registeredAddress?: string;
+  taxNumber?: string;
+  supplierType?: SupplierType;
+  supplyCategories?: string[];
+  brands?: string[];
+  cooperationStatus?: SupplierCooperationStatus;
+  website?: string;
+  remark?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  bankAccounts?: CreateSupplierBankAccountDto[];
+  contacts?: CreateSupplierContactDto[];
+}
+
+export interface UpdateSupplierDto extends Partial<CreateSupplierDto> {}
+
+export interface ContractingEntityBankAccount {
+  id: string;
+  entityId: string;
+  accountName?: string;
+  bankName: string;
+  bankAccount: string;
+  bankRoutingNumber?: string;
+  swiftCode?: string;
+  currency: string;
+  bankAddress?: string;
+  sortOrder: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContractingEntityContact {
+  id: string;
+  entityId: string;
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContractingEntityAttachment {
+  id: string;
+  entityId: string;
+  fileName: string;
+  fileType?: string;
+  fileSize: number;
+  dataUrl?: string;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContractingEntityDetail {
+  entity: ContractingEntity;
+  bankAccounts: ContractingEntityBankAccount[];
+  contacts: ContractingEntityContact[];
+  attachments: ContractingEntityAttachment[];
+}
+
+export interface ContractingEntity {
+  id: string;
+  entityCode: string;
+  nameCn?: string;
+  nameEn?: string;
+  shortName?: string;
+  entityName: string;
+  taxNumber?: string;
+  country?: string;
+  city?: string;
+  registeredAddress?: string;
+  address?: string;
+  remark?: string;
+  bankAccount?: string;
   contactName?: string;
   contactPhone?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CreateContractingEntityDto {
+  entityCode?: string;
+  nameCn?: string;
+  nameEn?: string;
+  shortName?: string;
+  entityName: string;
+  taxNumber?: string;
+  country?: string;
+  city?: string;
+  registeredAddress?: string;
+  address?: string;
+  remark?: string;
+  bankAccount?: string;
+  contactName?: string;
+  contactPhone?: string;
+  bankAccounts?: Array<Partial<ContractingEntityBankAccount>>;
+  contacts?: Array<Partial<ContractingEntityContact>>;
+}
+
+export interface UpdateContractingEntityDto extends Partial<CreateContractingEntityDto> {}
 
 export interface HistoryQuotation {
   id: string;
@@ -103,6 +405,8 @@ export interface Quotation {
   status: QuotationStatus;
   customerId?: string;
   customerName?: string;
+  contractingEntityId?: string;
+  contractingEntityName?: string;
   remark?: string;
   sourceType?: 'customer_po' | '';
   sourcePoId?: string;
@@ -187,6 +491,8 @@ export interface CreateQuotationDto {
   status: QuotationStatus;
   customerId?: string;
   customerName?: string;
+  contractingEntityId?: string;
+  contractingEntityName?: string;
   remark?: string;
   sourceType?: 'customer_po' | '';
   sourcePoId?: string;
@@ -204,6 +510,11 @@ export interface PageResult<T> {
 export interface QuotationDetail {
   quotation: Quotation;
   items: QuotationItem[];
+}
+
+export interface QuotationDetailPage {
+  quotation: Quotation;
+  items: PageResult<QuotationItem>;
 }
 
 export interface CustomerPo {
@@ -317,6 +628,8 @@ export interface SettlementProject {
   quotationId: string;
   quotationNo: string;
   customerName?: string;
+  contractingEntityId?: string;
+  contractingEntityName?: string;
   remark?: string;
   exchangeRateUsd: number;
   exchangeRateMxn: number;
@@ -364,6 +677,17 @@ export interface SettlementProjectDetail {
   sales: SettlementSale[];
   invoices: SettlementInvoice[];
   attachments: SettlementAttachment[];
+}
+
+export interface SettlementProjectDetailPage {
+  project: SettlementProject;
+  items: PageResult<SettlementItem>;
+  unpurchasedItems: PageResult<SettlementItem>;
+  purchasedItems: PageResult<SettlementItem>;
+  expenses: PageResult<SettlementExpense>;
+  sales: PageResult<SettlementSale>;
+  invoices: PageResult<SettlementInvoice>;
+  attachments: PageResult<SettlementAttachment>;
 }
 
 export interface SettlementOrderItemDto {
@@ -440,6 +764,7 @@ export interface SettlementInvoice {
   projectId: string;
   type: SettlementInvoiceType;
   accountPeriod?: string;
+  accountingDate?: string;
   companyEntity?: string;
   invoiceEntity?: string;
   invoiceDate?: string;
@@ -459,6 +784,7 @@ export interface SettlementInvoice {
 export interface CreateSettlementInvoiceDto {
   type: SettlementInvoiceType;
   accountPeriod?: string;
+  accountingDate?: string;
   companyEntity?: string;
   invoiceEntity?: string;
   invoiceDate?: string;
@@ -494,9 +820,15 @@ export interface CreateSettlementAttachmentDto {
 }
 
 export interface FinanceInvoiceRow extends SettlementInvoice {
+  projectId: string;
+  projectNo: string;
   quotationId: string;
   quotationNo: string;
   customerName?: string;
   projectName?: string;
   projectStatus: SettlementProject['status'];
+  contractingEntityId?: string;
+  contractingEntityName?: string;
+  contractingEntityShortName?: string;
+  customerShortName?: string;
 }

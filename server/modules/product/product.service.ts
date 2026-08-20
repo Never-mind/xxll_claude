@@ -16,21 +16,9 @@ export class ProductService {
   ) {}
 
   async list(keyword = '', page = 1, pageSize = 10): Promise<PageResult<Product>> {
-    const all = await this.storage.readTable<Product>(FILE);
-    const normalized = keyword.trim().toLowerCase();
-    const filtered = normalized
-      ? all.filter((item) =>
-          [item.productCode, item.name, item.category].some((value) => String(value ?? '').toLowerCase().includes(normalized)),
-        )
-      : all;
-    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
-    const safePage = Math.max(1, Number(page) || 1);
-    return {
-      items: filtered.slice((safePage - 1) * safePageSize, safePage * safePageSize),
-      total: filtered.length,
-      page: safePage,
-      pageSize: safePageSize,
-    };
+    return this.storage.paginate<Product>(FILE, page, pageSize, undefined, {
+      search: { keyword, columns: ['productCode', 'name', 'category'] },
+    });
   }
 
   async all(): Promise<Product[]> {

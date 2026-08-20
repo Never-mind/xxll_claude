@@ -4,6 +4,7 @@ import { apiGet, apiWrite, download } from '../api.js';
 import LinkedNumber from '../components/LinkedNumber.js';
 import LoadingTableRows from '../components/LoadingTableRows.js';
 import type { Quotation, QuotationPage } from '../api.js';
+import { formatMoney, quotationStatusLabel } from '../utils/display.js';
 
 const tabs = [
   ['all', '全部'],
@@ -85,6 +86,7 @@ export default function QuotationList() {
               <th>客户</th>
               <th>项目名称</th>
               <th>状态</th>
+              <th>承接单位</th>
               <th>CIF(USD)</th>
               <th>到仓总价（USD）</th>
               <th>收入(USD)</th>
@@ -95,7 +97,7 @@ export default function QuotationList() {
             </tr>
           </thead>
           <tbody>
-            {loading && <LoadingTableRows columns={12} rows={Math.min(pageSize, 8)} />}
+            {loading && <LoadingTableRows columns={13} rows={Math.min(pageSize, 8)} />}
             {!loading && rows.map((row) => (
               <tr key={row.id} className={`selection-row ${selectedIds.includes(row.id) ? 'is-selected' : ''}`}>
                 <td>
@@ -110,7 +112,8 @@ export default function QuotationList() {
                 <td><LinkedNumber to={`/quotation/detail/${row.id}`}>{row.quotationNo}</LinkedNumber></td>
                 <td>{row.customerName || '-'}</td>
                 <td>{row.remark || '-'}</td>
-                <td><span className={`badge ${row.status}`}>{row.status}</span></td>
+                <td><span className={`badge ${row.status}`}>{quotationStatusLabel(row.status)}</span></td>
+                <td>{row.contractingEntityName || '未设置'}</td>
                 <td>{money(row.totalCifUsd)}</td>
                 <td>{money(row.totalDdpUsd)}</td>
                 <td>{money(row.totalRevenueUsd)}</td>
@@ -127,7 +130,7 @@ export default function QuotationList() {
             ))}
             {!loading && !rows.length && (
               <tr>
-                <td colSpan={12} className="empty-cell">暂无报价单数据</td>
+                <td colSpan={13} className="empty-cell">暂无报价单数据</td>
               </tr>
             )}
           </tbody>
@@ -152,5 +155,5 @@ export default function QuotationList() {
 }
 
 function money(value: number) {
-  return Number(value || 0).toFixed(2);
+  return formatMoney(value);
 }
